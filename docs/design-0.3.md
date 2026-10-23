@@ -156,7 +156,7 @@ apart from what the node verified (who, which package, approved or not).
   go to the other. (0.2 compared every later sender with the request sender,
   which would reject the responder.)
 - Agent card: `aun-card/1`, signed with JCS like messages.
-  `capabilities.protocol_versions` lists `aun/0.3`. All four kinds are
+  Its top-level `protocol_versions` lists `aun/0.3`. All four kinds are
   mandatory, so the card does not list them. Accepting a format is not the
   same as accepting a domain: a node may still answer `NOT_SUPPORTED`.
 - `aun/0.1` is not part of 0.3. No automatic fallback to older versions.
