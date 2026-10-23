@@ -1,7 +1,8 @@
 """Reference checker for AUN Protocol 0.3.
 
 Implements SPEC.md: signing (section 8), the receiver checks in order
-(section 9), session state (section 5) and the package rules (section 6).
+(section 9), session state (section 5), the package rules (section 6) and the
+agent card checks (section 11.2).
 It knows the four issue kinds and nothing about any domain: no intent name
 appears in this file.
 
@@ -9,7 +10,7 @@ Usage:
     python tools/aun_reference.py verify <envelope.json> --public-key <base64>
         [--no-time-check]
     python tools/aun_reference.py check-session <dir> --keys <keys.json>
-        [--now <date-time>]
+    python tools/aun_reference.py verify-card <card.json> [--now <date-time>]
 """
 
 from __future__ import annotations
@@ -43,8 +44,13 @@ MAX_COUNTERS = 3
 MAX_SESSION_DAYS = 7
 MAX_WINDOW_DAYS = 31
 MAX_INT = 2**53 - 1
+CARD_VERSION = "aun-card/1"
+CARD_MAX_BYTES = 2048
 SCHEMA_PATH = (
     Path(__file__).resolve().parents[1] / "schemas" / "negotiation-message.schema.json"
+)
+CARD_SCHEMA_PATH = (
+    Path(__file__).resolve().parents[1] / "schemas" / "agent-card.schema.json"
 )
 
 _DATE_TIME = re.compile(
@@ -255,6 +261,17 @@ def _validator() -> Any:
     return _VALIDATOR
 
 
+_CARD_VALIDATOR: Any = None
+
+
+def _card_validator() -> Any:
+    global _CARD_VALIDATOR
+    if _CARD_VALIDATOR is None:
+        schema = json.loads(CARD_SCHEMA_PATH.read_text(encoding="utf-8"))
+        _CARD_VALIDATOR = _StrictValidator(schema)
+    return _CARD_VALIDATOR
+
+
 def _date_times(envelope: dict[str, Any]) -> list[str]:
     """Every date-time in a message that already matches the schema."""
     found = [envelope["created_at"]]
@@ -420,6 +437,98 @@ def validate_offer(issues: list[dict[str, Any]], offer: list[dict[str, Any]]) ->
         raise _bad("offer repeats a package")
 
 
+# ---- agent card (SPEC section 11) -------------------------------------------
+
+
+def sign_card(fields: dict[str, Any], private_key: Ed25519PrivateKey) -> dict[str, Any]:
+    """SPEC section 11.1: `signature` covers the JCS of the card without it.
+
+    Any `signature` in `fields` is dropped. Nothing is checked here.
+    """
+    card = {k: v for k, v in fields.items() if k != "signature"}
+    card["signature"] = base64.b64encode(private_key.sign(canonical(card))).decode("ascii")
+    return card
+
+
+def encode_card(card: dict[str, Any]) -> bytes:
+    """The byte form used by the examples. Any JSON form is valid on the wire."""
+    return encode(card)
+
+
+def _card_error(code: str, exc: VerificationError) -> VerificationError:
+    return VerificationError(code, str(exc).partition(": ")[2])
+
+
+def verify_card(data: bytes, now: datetime) -> dict[str, Any]:
+    """SPEC section 11.2 steps 1 to 7, in order. Returns the parsed card.
+
+    Step 8 needs the stored cards and is `Node.accept_card`.
+    """
+    if len(data) > CARD_MAX_BYTES:
+        raise VerificationError("CARD_TOO_LARGE", f"{len(data)} bytes")
+    try:
+        card = parse_strict_json(data, CARD_MAX_BYTES)
+    except VerificationError as exc:
+        code = "CARD_TOO_LARGE" if exc.code == "MESSAGE_TOO_LARGE" else "CARD_SCHEMA_INVALID"
+        raise _card_error(code, exc) from exc
+    errors = sorted(_card_validator().iter_errors(card), key=lambda e: list(e.path))
+    if errors:
+        where = "/".join(str(p) for p in errors[0].path) or "(root)"
+        raise VerificationError("CARD_SCHEMA_INVALID", f"{where}: {errors[0].message}")
+    try:
+        issued_at = parse_time(card["issued_at"])
+    except ValueError as exc:
+        raise VerificationError("CARD_SCHEMA_INVALID", str(exc)) from exc
+
+    try:
+        raw_key = b64decode_strict(card["public_key"], 32)
+        derived = node_id_from_public_key(raw_key)
+    except ValueError as exc:
+        raise VerificationError("CARD_IDENTITY_MISMATCH", "public_key is not a key") from exc
+    if card["node_id"] != derived:
+        raise VerificationError("CARD_IDENTITY_MISMATCH", f"node_id is not {derived}")
+
+    try:
+        key = Ed25519PublicKey.from_public_bytes(raw_key)
+        signature = b64decode_strict(card["signature"], 64)
+        signed = {k: v for k, v in card.items() if k != "signature"}
+        key.verify(signature, canonical(signed))
+    except (InvalidSignature, ValueError, TypeError, binascii.Error,
+            rfc8785.CanonicalizationError) as exc:
+        raise VerificationError("CARD_SIGNATURE_INVALID", "signature does not verify") from exc
+
+    if PROTOCOL not in card["protocol_versions"]:
+        raise VerificationError("CARD_VERSION_UNSUPPORTED", f"no {PROTOCOL}")
+
+    ahead = (issued_at - now).total_seconds()
+    if ahead > WINDOW_SECONDS:
+        raise VerificationError("CARD_NOT_YET_VALID", f"issued_at is {ahead:.0f}s ahead")
+    return card
+
+
+def make_card(
+    private_key: Ed25519PrivateKey, agent_id: str, display_name: str,
+    relay_endpoint: str, issued_at: str,
+    protocol_versions: tuple[str, ...] | list[str] = (PROTOCOL,),
+    now: datetime | None = None,
+) -> bytes:
+    """Sign a card and run steps 1 to 7 on it, so a sender never hands out a bad one."""
+    raw = private_key.public_key().public_bytes_raw()
+    card = sign_card({
+        "version": CARD_VERSION,
+        "node_id": node_id_from_public_key(raw),
+        "agent_id": agent_id,
+        "public_key": base64.b64encode(raw).decode("ascii"),
+        "display_name": display_name,
+        "protocol_versions": list(protocol_versions),
+        "relay_endpoint": relay_endpoint,
+        "issued_at": issued_at,
+    }, private_key)
+    data = encode_card(card)
+    verify_card(data, now or parse_time(issued_at))
+    return data
+
+
 # ---- session state (SPEC section 5) ----------------------------------------
 
 
@@ -489,6 +598,8 @@ class Node:
     sessions: dict[tuple[str, str], Session] = field(default_factory=dict)
     seen: dict[tuple[str, str], bytes] = field(default_factory=dict)
     nonces: set[tuple[str, str]] = field(default_factory=set)
+    cards: dict[str, dict[str, Any]] = field(default_factory=dict)
+    last_issued_at: datetime | None = None
 
     @property
     def node_id(self) -> str:
@@ -501,6 +612,61 @@ class Node:
 
     def trust(self, peer: Peer) -> None:
         self.trusted[peer.node_id] = peer
+
+    # -- cards (SPEC section 11.2) ----------------------------------------
+
+    def accept_card(self, data: bytes, now: datetime, in_person: bool = False) -> str:
+        """Run SPEC section 11.2 steps 1 to 8. Returns "trusted" or "updated".
+
+        Raises VerificationError when the card is refused. A refusal changes
+        nothing. A peer registered with `trust()` and no card counts as the
+        stored identity without an `issued_at`: any valid card with the same
+        key and agent is an update.
+
+        The compare and the replace are one step here because the reference
+        is single-threaded. A real node does them atomically and durably.
+        """
+        card = verify_card(data, now)
+        node_id = card["node_id"]
+        stored = self.cards.get(node_id)
+        peer = self.trusted.get(node_id)
+        if stored is None and peer is None:
+            if not in_person:
+                raise VerificationError("CARD_PEER_NOT_TRUSTED", node_id)
+            result = "trusted"
+        else:
+            known_key, known_agent = (
+                (stored["public_key"], stored["agent_id"]) if stored is not None
+                else (peer.public_key, peer.agent_id)
+            )
+            if card["public_key"] != known_key or card["agent_id"] != known_agent:
+                raise VerificationError("CARD_IDENTITY_MISMATCH", "key or agent differs")
+            if stored is not None and not (
+                parse_time(card["issued_at"]) > parse_time(stored["issued_at"])
+            ):
+                raise VerificationError("CARD_STALE", "issued_at is not later")
+            result = "updated"
+        self.cards[node_id] = card
+        self.trust(Peer(card["agent_id"], card["public_key"]))
+        return result
+
+    def issue_card(
+        self, display_name: str, relay_endpoint: str, issued_at: str,
+        protocol_versions: tuple[str, ...] | list[str] = (PROTOCOL,),
+        now: datetime | None = None,
+    ) -> bytes:
+        """Make this node's card. `issued_at` must be later than every earlier card.
+
+        SPEC section 11.2: the node keeps the last `issued_at` instead of
+        trusting its clock alone.
+        """
+        when = parse_time(issued_at)
+        if self.last_issued_at is not None and not when > self.last_issued_at:
+            raise ValueError(f"issued_at must be later than {self.last_issued_at.isoformat()}")
+        data = make_card(self.private_key, self.agent_id, display_name, relay_endpoint,
+                         issued_at, protocol_versions, now)
+        self.last_issued_at = when
+        return data
 
     # -- receiving ---------------------------------------------------------
 
@@ -723,6 +889,9 @@ def main(argv: list[str] | None = None) -> int:
     replay.add_argument("directory", type=Path)
     replay.add_argument("--keys", required=True, type=Path,
                         help="keys file with seeds (test keys only)")
+    card = sub.add_parser("verify-card", help="run card checks 1 to 7 on one card file")
+    card.add_argument("card", type=Path)
+    card.add_argument("--now", help="date-time of the clock (default: now, UTC)")
     args = parser.parse_args(argv)
 
     try:
@@ -736,6 +905,11 @@ def main(argv: list[str] | None = None) -> int:
                                         f"sender_node_id is not {expected}")
             print(f"OK {envelope['message_type']} seq={envelope['sequence']} "
                   f"from {envelope['sender_node_id']}")
+        elif args.command == "verify-card":
+            now = parse_time(args.now) if args.now else datetime.now(timezone.utc)
+            parsed = verify_card(args.card.read_bytes(), now)
+            print(f"OK card {parsed['node_id']} ({parsed['agent_id']}) "
+                  f"issued_at {parsed['issued_at']}")
         else:
             session = check_session(args.directory, _load_keys(args.keys))
             print(f"OK {session.session_id}: {session.status} after "

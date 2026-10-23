@@ -20,7 +20,13 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from aun_reference import PROTOCOL, Node, Peer, node_id_from_public_key  # noqa: E402
+from aun_reference import (  # noqa: E402
+    PROTOCOL,
+    Node,
+    Peer,
+    make_card,
+    node_id_from_public_key,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 JST = timezone(timedelta(hours=9))
@@ -231,6 +237,14 @@ def build_all() -> dict[str, bytes]:
                {"gift": "Coffee beans", "budget": 2000})),
         ("a", "ACCEPT", {}, {"agreed": {"gift": "Tea set", "budget": 3000}}),
     ]))
+
+    # Agent cards (SPEC section 11). Issued in the past on purpose, so
+    # `verify-card` passes with the real clock.
+    for who, name in (("a", "Example A (test key only)"), ("b", "Example B (test key only)")):
+        node = NODES[who]
+        files[f"examples/cards/{who}.json"] = make_card(
+            node["private"], node["personal_agent_id"], name,
+            "https://relay.example/aun", "2026-10-01T09:00:00+09:00")
     return files
 
 

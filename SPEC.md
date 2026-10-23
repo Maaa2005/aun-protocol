@@ -14,10 +14,13 @@ packages of values. The 0.2 specification is frozen at tag
 
 The machine-readable contract is
 [schemas/negotiation-message.schema.json](schemas/negotiation-message.schema.json)
-(JSON Schema 2020-12). The schema checks shapes only. The rules that relate a
-package to its declaration or to the standing offer are in section 6.
-[tools/aun_reference.py](tools/aun_reference.py) implements sections 5, 6, 8
-and 9 and is the executable reading of this document.
+for messages and
+[schemas/agent-card.schema.json](schemas/agent-card.schema.json) for agent
+cards (JSON Schema 2020-12). The schemas check shapes only. The rules that
+relate a package to its declaration or to the standing offer are in section
+6, and the card checks are in section 11.
+[tools/aun_reference.py](tools/aun_reference.py) implements sections 5, 6, 8,
+9 and 11.2 and is the executable reading of this document.
 
 The key words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119.
 
@@ -395,33 +398,121 @@ Receiver-side outcomes of section 9, which are never sent:
 `MESSAGE_TOO_LARGE`, `MESSAGE_SCHEMA_INVALID`, `PEER_NOT_TRUSTED`,
 `AGENT_IDENTITY_MISMATCH`, `MESSAGE_SIGNATURE_INVALID`, `MESSAGE_EXPIRED`,
 `MESSAGE_REPLAYED`, `SESSION_BINDING_MISMATCH`, `INVALID_STATE_TRANSITION`,
-`SESSION_EXPIRED`, `INVALID_NEGOTIATION_PAYLOAD`.
+`SESSION_EXPIRED`, `INVALID_NEGOTIATION_PAYLOAD`. The card outcomes are in
+section 11.2.
 
 ## 11. Trust, agent card and transport
 
-Two nodes trust each other out of band, for example by scanning a code in
-person. Each then holds the other's **agent card**:
+Each node describes itself with an **agent card**: a small JSON object signed
+by the node key. Two nodes trust each other out of band: each takes the
+other's whole card in person, for example by scanning it as a QR code. The
+signature proves only that the card's maker holds the key. It does not say who
+the human is. The in-person step does.
 
-| Field | Meaning |
-| --- | --- |
-| `version` | `"aun-card/1"` |
-| `node_id` | Must match `public_key` (section 2). |
-| `agent_id` | The personal agent represented. |
-| `public_key` | Base64 of the raw 32-byte Ed25519 key. |
-| `display_name` | Name shown to humans, not blank. Free text (section 9). |
-| `protocol_versions` | Includes `"aun/0.3"`. |
-| `relay_endpoint` | Where the node receives messages. |
-| `issued_at` | Issue time. |
-| `signature` | Base64 Ed25519 signature by the node key over the JCS of the card without `signature`. |
+### 11.1 Fields
+
+All nine fields are required. No other field is allowed. The shapes are in
+[schemas/agent-card.schema.json](schemas/agent-card.schema.json).
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `version` | string | Always `"aun-card/1"`. |
+| `node_id` | node ID | Derived from `public_key` (section 2). |
+| `agent_id` | id | The personal agent represented. |
+| `public_key` | string | Base64 of the raw 32-byte Ed25519 key, in the canonical form of section 8: 44 characters. |
+| `display_name` | string of 1 to 100 code points | Name shown to humans. Free text (section 9), checked only for its length. |
+| `protocol_versions` | array of 1 to 8 distinct strings of 1 to 32 code points | Includes `"aun/0.3"`. Other entries are ignored. |
+| `relay_endpoint` | string | Where the node receives messages: `https://` followed by 1 to 248 printable ASCII characters other than space. |
+| `issued_at` | date-time | When the node made this card (section 2). |
+| `signature` | string | Base64 of the 64-byte Ed25519 signature by the card's own key over the JCS of the card without `signature` (section 8). |
 
 All four issue kinds are mandatory, so a card does not list them. Accepting
 the format is not accepting every agreement: a node MAY still answer
 `NOT_SUPPORTED`.
 
-Transport (informative): messages travel through a relay that stores and
-forwards them by `receiver_node_id`. The relay should accept a message only
-from the authenticated `sender_node_id`, and limit size and rate. It does not
-verify signatures. Delivery confirmation (section 5.3) comes from the
+### 11.2 Card checks
+
+A card is peer input, like a message. A node runs these checks in order. A
+failed check refuses the card and changes nothing.
+
+1. **Size.** At most 2048 bytes, checked before parsing, so a card fits in
+   one QR code. Else `CARD_TOO_LARGE`. The total limit wins over the
+   per-field limits.
+2. **Strict JSON.** As section 9 step 2. Else `CARD_SCHEMA_INVALID`.
+3. **Schema.** The card matches the card schema, and `issued_at` is a real
+   instant (section 2). Else `CARD_SCHEMA_INVALID`.
+4. **Identity.** `node_id` is derived from `public_key`. Else
+   `CARD_IDENTITY_MISMATCH`.
+5. **Signature.** `signature` verifies with `public_key`. Else
+   `CARD_SIGNATURE_INVALID`.
+6. **Version.** `protocol_versions` includes `"aun/0.3"`. Else
+   `CARD_VERSION_UNSUPPORTED`.
+7. **Clock.** `issued_at` is at most 300 seconds after the receiver's clock.
+   Else `CARD_NOT_YET_VALID`. Without this limit, one card dated far ahead
+   would block every later update (step 8). There is no lower limit: an old
+   card is still valid.
+8. **Stored card.** Look up the stored card by `node_id`.
+   - None is stored: the card is stored only when it came through the
+     in-person step. Else `CARD_PEER_NOT_TRUSTED`.
+   - One is stored: `public_key` must be byte for byte the stored key and
+     `agent_id` the stored agent (else `CARD_IDENTITY_MISMATCH`), and
+     `issued_at`, compared as an instant, must be strictly later than the
+     stored one (else `CARD_STALE`). So the same card sent again, or written
+     with another offset for the same instant, is `CARD_STALE`. The new card
+     then replaces the stored one.
+   - A peer whose whole key was registered out of band without a card counts
+     as stored with no `issued_at`. Its first card is stored from any channel
+     when `public_key` and `agent_id` match (else `CARD_IDENTITY_MISMATCH`).
+
+A node compares and replaces the stored card in one step and keeps it
+durably. Two updates arriving together therefore cannot leave the older one
+stored, and a restart does not bring an older card back.
+
+Receiver-side card outcomes, which are never sent, also not in an `ERROR`:
+`CARD_TOO_LARGE`, `CARD_SCHEMA_INVALID`, `CARD_IDENTITY_MISMATCH`,
+`CARD_SIGNATURE_INVALID`, `CARD_VERSION_UNSUPPORTED`, `CARD_NOT_YET_VALID`,
+`CARD_PEER_NOT_TRUSTED`, `CARD_STALE`.
+
+A node runs steps 1 to 7 on its own card before handing it out. Each new card
+it makes has an `issued_at` strictly later than all its earlier cards, so the
+node keeps the last one durably instead of trusting its clock alone.
+
+### 11.3 Updates, keys and endpoints
+
+A later card replaces `display_name`, `protocol_versions` and
+`relay_endpoint`. Sessions, message IDs and nonces already recorded are not
+affected. Because the key is already trusted, an update may come by any
+channel, for example from the relay. A first card counts only after the
+in-person step.
+
+The node ID has only 64 bits, so a second key with the same node ID can be
+searched for. The in-person step therefore covers the whole key, for example
+by scanning the whole card. Reading out the node ID alone is not enough.
+Messages are verified with the full stored key (section 8), and step 8 keeps
+the stored key, so a colliding key is refused rather than taking its place.
+
+A new key is a new peer. A node that loses or replaces its key gets a new
+card, and its peers trust it again in person. Nothing carries over from the
+old key, neither the card nor the sessions. Removing the old card is a local
+step of the human. 0.3 has no revocation and no expiry.
+
+`relay_endpoint` comes from the peer. A node uses it only to deliver AUN
+messages to that peer, and sends no credential there other than its own
+authentication to the relay. It SHOULD refuse an endpoint that resolves to a
+loopback or private network address, and SHOULD show its human when a peer's
+endpoint changes.
+
+Limits (informative): a receiver whose clock runs fast can accept a card dated
+ahead of the sender's clock. A relay can withhold a newer card. A node
+restored from an old backup can accept an older card again. A stolen key can
+sign a valid update. 0.3 does not prevent these.
+
+### 11.4 Transport
+
+This subsection is informative. Messages travel through a relay that stores
+and forwards them by `receiver_node_id`. The relay should accept a message
+only from the authenticated `sender_node_id`, and limit size and rate. It does
+not verify signatures. Delivery confirmation (section 5.3) comes from the
 transport, not from an AUN message.
 
 Probing a peer's limits with repeated sessions is a local policy matter. This
@@ -478,11 +569,26 @@ This section is informative.
 - [tools/make_vectors.py](tools/make_vectors.py) builds that file byte for
   byte, and `python tools/make_vectors.py --check` replays it through the
   reference node.
+- [examples/cards/](examples/cards/) has the cards of the two example nodes,
+  and `python tools/aun_reference.py verify-card <file>` runs card checks 1
+  to 7 of section 11.2 on one card.
+- [test-vectors/card-v1.json](test-vectors/card-v1.json) holds card cases.
+  Each case starts a fresh node B that has stored no card, and lists steps in
+  order. A step gives the card bytes in Base64, the receiver's clock `now`,
+  `in_person` (whether the card came through the in-person step) and
+  `expect`: `trusted` for a first card, `updated` for a later card, or the
+  code of the refusal. After the last step, `final` is the `issued_at` of the
+  card B stores for A, as written in that card, or `null` if B stores none.
+  A refusal changes nothing.
+- [tools/make_card_vectors.py](tools/make_card_vectors.py) builds that file
+  byte for byte, and `python tools/make_card_vectors.py --check` replays it
+  through the reference node.
 - `pytest -q` runs [tests/test_conformance.py](tests/test_conformance.py): the
-  JCS vectors, every example, the receiver vectors, and more dropped cases of
-  sections 4 to 9.
+  JCS vectors, every example, the receiver vectors, the card vectors, and more
+  dropped cases of sections 4 to 9.
 
 Not covered by tests: approval (section 7), free text handling (section 9),
-double booking across sessions (section 7) and the unknown outcome of an
-unconfirmed `ACCEPT` (section 5.3). These are local duties a receiver cannot
-observe.
+double booking across sessions (section 7), the unknown outcome of an
+unconfirmed `ACCEPT` (section 5.3), the in-person step, durable and atomic
+card storage, and how a node uses `relay_endpoint` (section 11). These are
+local duties a receiver cannot observe.

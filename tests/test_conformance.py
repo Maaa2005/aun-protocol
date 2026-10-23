@@ -6,7 +6,9 @@ Run from the repository root: `pytest -q`.
 from __future__ import annotations
 
 import base64
+import copy
 import json
+import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -19,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
 import aun_reference  # noqa: E402
+import make_card_vectors  # noqa: E402
 import make_examples  # noqa: E402
 import make_vectors  # noqa: E402
 from aun_reference import (  # noqa: E402
@@ -29,14 +32,18 @@ from aun_reference import (  # noqa: E402
     VerificationError,
     check_session,
     encode,
+    make_card,
     node_id_from_public_key,
     parse_envelope_bytes,
+    parse_time,
     sign_envelope,
+    verify_card,
     verify_envelope,
 )
 
 EXAMPLES = ROOT / "examples"
-SESSION_DIRS = sorted(p for p in EXAMPLES.iterdir() if p.is_dir())
+SESSION_DIRS = sorted(p for p in EXAMPLES.iterdir() if p.is_dir() and p.name != "cards")
+CARD_FILES = sorted((EXAMPLES / "cards").glob("*.json"))
 KEYS = json.loads((EXAMPLES / "keys.json").read_text(encoding="utf-8"))["nodes"]
 PUBLIC_KEY_BY_NODE = {n["node_id"]: n["public_key"] for n in KEYS.values()}
 ALL_FILES = sorted(p for d in SESSION_DIRS for p in d.glob("*.json"))
@@ -668,8 +675,10 @@ def test_vector_case(case):
     assert make_vectors.run_case(case) == expected
 
 
-def test_every_schema_pattern_is_anchored():
-    schema = json.loads(aun_reference.SCHEMA_PATH.read_text(encoding="utf-8"))
+@pytest.mark.parametrize("path", [aun_reference.SCHEMA_PATH, aun_reference.CARD_SCHEMA_PATH],
+                         ids=lambda p: p.name)
+def test_every_schema_pattern_is_anchored(path):
+    schema = json.loads(path.read_text(encoding="utf-8"))
     found = []
 
     def walk(node):
@@ -684,3 +693,204 @@ def test_every_schema_pattern_is_anchored():
 
     walk(schema)
     assert found and all(p.startswith("^") and p.endswith("$") for p in found)
+
+
+# ---- agent cards (SPEC section 11) ------------------------------------------
+#
+# Card cases for other implementations (test-vectors/card-v1.json), the example
+# cards, and what a stored card does for messages.
+
+CARD_VECTORS = json.loads((ROOT / make_card_vectors.OUTPUT).read_text(encoding="utf-8"))
+CARD_AT = "2099-01-01T08:00:00+09:00"
+CARD_NOW = T0 - timedelta(seconds=1)
+
+
+def test_regenerating_card_vectors_is_byte_identical():
+    assert make_card_vectors.build() == (ROOT / make_card_vectors.OUTPUT).read_bytes()
+
+
+def test_card_vectors_check_exits_zero():
+    done = subprocess.run(
+        [sys.executable, str(ROOT / "tools" / "make_card_vectors.py"), "--check"],
+        capture_output=True, text=True, check=False)
+    assert done.returncode == 0, done.stdout + done.stderr
+
+
+def test_receiver_vectors_check_still_exits_zero():
+    done = subprocess.run(
+        [sys.executable, str(ROOT / "tools" / "make_vectors.py"), "--check"],
+        capture_output=True, text=True, check=False)
+    assert done.returncode == 0, done.stdout + done.stderr
+
+
+def test_card_vectors_use_only_defined_codes():
+    codes = {step["expect"] for case in CARD_VECTORS["cases"] for step in case["steps"]}
+    spec = (ROOT / "SPEC.md").read_text(encoding="utf-8")
+    assert {"trusted", "updated"} <= codes
+    assert all(f"`{code}`" in spec for code in codes - {"trusted", "updated"})
+
+
+@pytest.mark.parametrize("case", CARD_VECTORS["cases"], ids=lambda case: case["name"])
+def test_card_vector_case(case):
+    expected = ([step["expect"] for step in case["steps"]], case["final"])
+    assert make_card_vectors.run_case(case) == expected
+
+
+def test_card_vectors_cover_every_code_of_section_11_2():
+    codes = {step["expect"] for case in CARD_VECTORS["cases"] for step in case["steps"]}
+    assert {c for c in codes if c.startswith("CARD_")} == {
+        "CARD_TOO_LARGE", "CARD_SCHEMA_INVALID", "CARD_IDENTITY_MISMATCH",
+        "CARD_SIGNATURE_INVALID", "CARD_VERSION_UNSUPPORTED", "CARD_NOT_YET_VALID",
+        "CARD_PEER_NOT_TRUSTED", "CARD_STALE"}
+
+
+def test_card_schema_defs_equal_the_message_schema_defs():
+    message = json.loads(aun_reference.SCHEMA_PATH.read_text(encoding="utf-8"))["$defs"]
+    card = json.loads(aun_reference.CARD_SCHEMA_PATH.read_text(encoding="utf-8"))["$defs"]
+    assert card
+    for name, definition in card.items():
+        assert message[name] == definition, name
+
+
+def test_example_cards_exist_and_are_marked_test_only():
+    assert [p.name for p in CARD_FILES] == ["a.json", "b.json"]
+    for path, label in zip(CARD_FILES, "ab"):
+        card = load(path)
+        assert "test key only" in card["display_name"]
+        assert card["public_key"] == KEYS[label]["public_key"]
+        assert card["node_id"] == KEYS[label]["node_id"]
+        assert card["agent_id"] == KEYS[label]["personal_agent_id"]
+
+
+@pytest.mark.parametrize("path", CARD_FILES, ids=lambda p: p.name)
+def test_example_card_verifies(path, capsys):
+    card = verify_card(path.read_bytes(), parse_time("2026-10-01T09:00:00+09:00"))
+    assert aun_reference.main(["verify-card", str(path)]) == 0
+    assert capsys.readouterr().out == (
+        f"OK card {card['node_id']} ({card['agent_id']}) issued_at {card['issued_at']}\n")
+
+
+@pytest.mark.parametrize("path", CARD_FILES, ids=lambda p: p.name)
+def test_tampered_example_card_fails(path, tmp_path, capsys):
+    bad = tmp_path / "bad.json"
+    bad.write_bytes(path.read_bytes().replace(b"test key only", b"test key none"))
+    assert aun_reference.main(["verify-card", str(bad)]) == 1
+    assert capsys.readouterr().err.startswith("FAIL CARD_SIGNATURE_INVALID:")
+
+
+def test_cli_verify_card_now_option(capsys):
+    path = str(CARD_FILES[0])
+    assert aun_reference.main(["verify-card", path, "--now", "2026-10-01T08:55:00+09:00"]) == 0
+    assert aun_reference.main(["verify-card", path, "--now", "2026-10-01T08:54:59+09:00"]) == 1
+    assert "CARD_NOT_YET_VALID" in capsys.readouterr().err
+
+
+def bare_nodes() -> dict[str, Node]:
+    """Nodes a, b and c that trust no one and hold no card."""
+    return {label: Node(f"agent-{label}", _key(label)) for label in "abc"}
+
+
+def card_of(node: Node, issued_at: str = CARD_AT, **kwargs) -> bytes:
+    return make_card(node.private_key, node.agent_id, kwargs.pop("display_name", "Node"),
+                     "https://relay.example/aun", issued_at, **kwargs)
+
+
+def request_from_a(conv: Conversation) -> bytes:
+    return conv.signed("a", "b", "REQUEST", request(DINNER), {"offer": [
+        {"place": "Sushi", "time": slot(18)}, {"place": "Pasta", "time": slot(19)}]}, 1)
+
+
+def test_message_is_accepted_after_the_card_came_in_person():
+    nodes = bare_nodes()
+    conv = Conversation(nodes)
+    assert nodes["b"].accept_card(card_of(nodes["a"]), CARD_NOW, in_person=True) == "trusted"
+    assert nodes["b"].receive(request_from_a(conv), T0 + timedelta(seconds=1)) == "accepted"
+
+
+def test_message_is_dropped_after_only_a_refused_card():
+    nodes = bare_nodes()
+    conv = Conversation(nodes)
+    with pytest.raises(VerificationError) as caught:
+        nodes["b"].accept_card(card_of(nodes["a"]), CARD_NOW)
+    assert caught.value.code == "CARD_PEER_NOT_TRUSTED"
+    assert not nodes["b"].cards and not nodes["b"].trusted
+    dropped("PEER_NOT_TRUSTED", nodes["b"], request_from_a(conv), T0 + timedelta(seconds=1))
+
+
+def test_card_update_keeps_sessions_ids_and_nonces():
+    nodes = bare_nodes()
+    a, b = nodes["a"], nodes["b"]
+    a.trust(Peer(b.agent_id, base64.b64encode(
+        b.private_key.public_key().public_bytes_raw()).decode("ascii")))
+    b.accept_card(card_of(a), CARD_NOW, in_person=True)
+    conv = Conversation(nodes)
+    conv.exchange("a", "b", "REQUEST", request(DINNER), {"offer": [
+        {"place": "Sushi", "time": slot(18)}, {"place": "Pasta", "time": slot(19)}]}, 1)
+    conv.exchange("b", "a", "COUNTER", {"public_reason": "no_common_option"},
+                  {"offer": [{"place": "Pasta", "time": slot(20)}]}, 2)
+    before = copy.deepcopy((b.sessions, b.seen, b.nonces))
+    update = card_of(a, "2099-01-01T08:30:00+09:00", display_name="Renamed")
+    assert b.accept_card(update, CARD_NOW) == "updated"
+    assert b.cards[a.node_id]["display_name"] == "Renamed"
+    assert (b.sessions, b.seen, b.nonces) == before
+    conv.exchange("a", "b", "ACCEPT", {}, {"agreed": {"place": "Pasta", "time": slot(20)}}, 3)
+    assert conv.state("b").status == "agreed"
+
+
+def test_peer_registered_without_a_card_takes_a_card_for_the_same_key_and_agent():
+    nodes = bare_nodes()
+    a, b = nodes["a"], nodes["b"]
+    public = base64.b64encode(a.private_key.public_key().public_bytes_raw()).decode("ascii")
+    b.trust(Peer(a.agent_id, public))
+    other_agent = make_card(a.private_key, "agent-x", "Node", "https://relay.example/aun",
+                            CARD_AT)
+    with pytest.raises(VerificationError) as caught:
+        b.accept_card(other_agent, CARD_NOW)
+    assert caught.value.code == "CARD_IDENTITY_MISMATCH"
+    assert not b.cards and b.trusted[a.node_id].agent_id == a.agent_id
+    assert b.accept_card(card_of(a), CARD_NOW) == "updated"
+    assert b.cards[a.node_id]["issued_at"] == CARD_AT
+    with pytest.raises(VerificationError) as caught:
+        b.accept_card(card_of(a), CARD_NOW)
+    assert caught.value.code == "CARD_STALE"
+
+
+def test_a_refused_card_changes_nothing():
+    nodes = bare_nodes()
+    a, b = nodes["a"], nodes["b"]
+    b.accept_card(card_of(a), CARD_NOW, in_person=True)
+    before = copy.deepcopy((b.cards, b.trusted))
+    for data, code in (
+        (card_of(a), "CARD_STALE"),
+        (make_card(a.private_key, "agent-x", "Node", "https://relay.example/aun",
+                   "2099-01-01T08:30:00+09:00"), "CARD_IDENTITY_MISMATCH"),
+        (card_of(a, "2099-01-01T08:30:00+09:00")[:-5], "CARD_SCHEMA_INVALID"),
+    ):
+        with pytest.raises(VerificationError) as caught:
+            b.accept_card(data, CARD_NOW, in_person=True)
+        assert caught.value.code == code
+        assert (b.cards, b.trusted) == before
+
+
+def test_make_card_refuses_to_build_a_card_that_fails_its_own_checks():
+    a = bare_nodes()["a"]
+    with pytest.raises(VerificationError) as caught:
+        card_of(a, protocol_versions=["aun/0.2"])
+    assert caught.value.code == "CARD_VERSION_UNSUPPORTED"
+    with pytest.raises(VerificationError) as caught:
+        card_of(a, CARD_AT, display_name="")
+    assert caught.value.code == "CARD_SCHEMA_INVALID"
+
+
+def test_issue_card_needs_a_strictly_later_issued_at():
+    a = bare_nodes()["a"]
+    endpoint = "https://relay.example/aun"
+    first = a.issue_card("Node", endpoint, "2099-01-01T09:00:00+09:00")
+    assert verify_card(first, T0)["issued_at"] == "2099-01-01T09:00:00+09:00"
+    for same_or_older in ("2099-01-01T09:00:00+09:00", "2099-01-01T00:00:00Z",
+                          "2099-01-01T08:59:59+09:00"):
+        with pytest.raises(ValueError):
+            a.issue_card("Node", endpoint, same_or_older)
+    assert a.last_issued_at == parse_time("2099-01-01T09:00:00+09:00")
+    a.issue_card("Node", endpoint, "2099-01-01T09:00:01+09:00")
+    assert a.last_issued_at == parse_time("2099-01-01T09:00:01+09:00")

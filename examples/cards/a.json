@@ -1,0 +1,13 @@
+{
+  "version": "aun-card/1",
+  "node_id": "agt_291e1df27cc1f0f9",
+  "agent_id": "agent-a",
+  "public_key": "5yH9+LlxfTFObEPuTi6JLMlo9om/L5f3taNbXvFgCjU=",
+  "display_name": "Example A (test key only)",
+  "protocol_versions": [
+    "aun/0.3"
+  ],
+  "relay_endpoint": "https://relay.example/aun",
+  "issued_at": "2026-10-01T09:00:00+09:00",
+  "signature": "0phdjwt2UmUDQsh4PLv6Zri+duhtEcXmUUwfD4/BRmmN4GBsjXzfmyQlCDscT3jhWkS6dKNRCcoYpKcwqnyGCw=="
+}

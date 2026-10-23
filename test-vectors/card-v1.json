@@ -1,0 +1,638 @@
+{
+  "WARNING": "TEST ONLY - never use these keys. The seeds are derived from public strings and are published here so the examples can be reproduced.",
+  "protocol": "aun/0.3",
+  "format": [
+    "Agent card cases for SPEC section 11, for an implementation in any language.",
+    "Each case starts a fresh node B that has stored no card and trusts no one.",
+    "Its steps run in order. A step gives the card bytes `card` (Base64), B's clock",
+    "`now`, `in_person` (the card came through the in-person step) and `expect`:",
+    "trusted for a first card, updated for a later card, or the code of the refusal.",
+    "A refusal changes nothing. After the last step, `final` is the `issued_at` of the",
+    "card B stores for node A, as written in that card, or null when B stores none."
+  ],
+  "nodes": {
+    "a": {
+      "role": "card owner",
+      "personal_agent_id": "agent-a",
+      "node_id": "agt_291e1df27cc1f0f9",
+      "public_key": "5yH9+LlxfTFObEPuTi6JLMlo9om/L5f3taNbXvFgCjU=",
+      "seed_hex": "0ee495c0ca421918dd67a0ef69cb1f3a4f9eeb0b19cf5194901ec5aff1718637"
+    },
+    "b": {
+      "role": "receiver",
+      "personal_agent_id": "agent-b",
+      "node_id": "agt_ca07afd7b2241f78",
+      "public_key": "ny9olPZA86PrrqKq4Zfafzj4/p1/+6DGKmrCIPKzFg0=",
+      "seed_hex": "785707a1fd336f1676057b4928abeffbfdbcaba981c0148f51cec48448a4c6fe"
+    },
+    "c": {
+      "role": "other node",
+      "personal_agent_id": "agent-c",
+      "node_id": "agt_ccdf848d8d0b7921",
+      "public_key": "wRoeiuyqZhUo3iHuEJ9zBvRTg4aV6yJUUPWgw5m9Tco=",
+      "seed_hex": "87c95ab1b421c246250134939d5f224bc0a1a3b0340cd30c4e6d2e32bf10df9f"
+    }
+  },
+  "cases": [
+    {
+      "name": "first_in_person",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICJnSUhqTlNNR0QvbDRZVFVlczVIRXlPZlNHeVdlUUZwb0RwaWFmQmxEU29ZakxGT2pkellMN2JndEIvdWJDOCtCUW1UT3BUOGpTa3FjNmxjN29NNlhEdz09Igp9Cg==",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "trusted"
+        }
+      ],
+      "final": "2099-01-01T09:00:00+09:00"
+    },
+    {
+      "name": "first_via_relay",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICJnSUhqTlNNR0QvbDRZVFVlczVIRXlPZlNHeVdlUUZwb0RwaWFmQmxEU29ZakxGT2pkellMN2JndEIvdWJDOCtCUW1UT3BUOGpTa3FjNmxjN29NNlhEdz09Igp9Cg==",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": false,
+          "expect": "CARD_PEER_NOT_TRUSTED"
+        }
+      ],
+      "final": null
+    },
+    {
+      "name": "later_update",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICJnSUhqTlNNR0QvbDRZVFVlczVIRXlPZlNHeVdlUUZwb0RwaWFmQmxEU29ZakxGT2pkellMN2JndEIvdWJDOCtCUW1UT3BUOGpTa3FjNmxjN29NNlhEdz09Igp9Cg==",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "trusted"
+        },
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIChuZXcpIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EyIiwKICAiaXNzdWVkX2F0IjogIjIwOTktMDEtMDFUMDk6MTA6MDArMDk6MDAiLAogICJzaWduYXR1cmUiOiAiYmZNVWQzSmZpaXBVbFNwRmgxZXBKS3JsbmFzZzlHWk9saDV3aUZGbEtzd1ZQWGl5MnRDcHFIdXlvcGxZUEU5bG41UXNvQi9VMTNGRUxhVUxVQXZNQXc9PSIKfQo=",
+          "now": "2099-01-01T09:11:00+09:00",
+          "in_person": false,
+          "expect": "updated"
+        }
+      ],
+      "final": "2099-01-01T09:10:00+09:00"
+    },
+    {
+      "name": "identical_resend",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICJnSUhqTlNNR0QvbDRZVFVlczVIRXlPZlNHeVdlUUZwb0RwaWFmQmxEU29ZakxGT2pkellMN2JndEIvdWJDOCtCUW1UT3BUOGpTa3FjNmxjN29NNlhEdz09Igp9Cg==",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "trusted"
+        },
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICJnSUhqTlNNR0QvbDRZVFVlczVIRXlPZlNHeVdlUUZwb0RwaWFmQmxEU29ZakxGT2pkellMN2JndEIvdWJDOCtCUW1UT3BUOGpTa3FjNmxjN29NNlhEdz09Igp9Cg==",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": false,
+          "expect": "CARD_STALE"
+        }
+      ],
+      "final": "2099-01-01T09:00:00+09:00"
+    },
+    {
+      "name": "in_person_resend",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICJnSUhqTlNNR0QvbDRZVFVlczVIRXlPZlNHeVdlUUZwb0RwaWFmQmxEU29ZakxGT2pkellMN2JndEIvdWJDOCtCUW1UT3BUOGpTa3FjNmxjN29NNlhEdz09Igp9Cg==",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "trusted"
+        },
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICJnSUhqTlNNR0QvbDRZVFVlczVIRXlPZlNHeVdlUUZwb0RwaWFmQmxEU29ZakxGT2pkellMN2JndEIvdWJDOCtCUW1UT3BUOGpTa3FjNmxjN29NNlhEdz09Igp9Cg==",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "CARD_STALE"
+        }
+      ],
+      "final": "2099-01-01T09:00:00+09:00"
+    },
+    {
+      "name": "same_instant_other_offset",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICJnSUhqTlNNR0QvbDRZVFVlczVIRXlPZlNHeVdlUUZwb0RwaWFmQmxEU29ZakxGT2pkellMN2JndEIvdWJDOCtCUW1UT3BUOGpTa3FjNmxjN29NNlhEdz09Igp9Cg==",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "trusted"
+        },
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwMDowMDowMFoiLAogICJzaWduYXR1cmUiOiAiUFpKa0RiMkdwcThERERtMEdtWW8rTE1WOVFnV3VLVWVjRlF6alVxcjRqNnBpa0VrakxTRWJqRlFQa1BMMExXRDNNb2lHanlDeW43Vm5vUUtpN2h3QXc9PSIKfQo=",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": false,
+          "expect": "CARD_STALE"
+        }
+      ],
+      "final": "2099-01-01T09:00:00+09:00"
+    },
+    {
+      "name": "older_card",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIChuZXcpIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EyIiwKICAiaXNzdWVkX2F0IjogIjIwOTktMDEtMDFUMDk6MTA6MDArMDk6MDAiLAogICJzaWduYXR1cmUiOiAiYmZNVWQzSmZpaXBVbFNwRmgxZXBKS3JsbmFzZzlHWk9saDV3aUZGbEtzd1ZQWGl5MnRDcHFIdXlvcGxZUEU5bG41UXNvQi9VMTNGRUxhVUxVQXZNQXc9PSIKfQo=",
+          "now": "2099-01-01T09:11:00+09:00",
+          "in_person": true,
+          "expect": "trusted"
+        },
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICJnSUhqTlNNR0QvbDRZVFVlczVIRXlPZlNHeVdlUUZwb0RwaWFmQmxEU29ZakxGT2pkellMN2JndEIvdWJDOCtCUW1UT3BUOGpTa3FjNmxjN29NNlhEdz09Igp9Cg==",
+          "now": "2099-01-01T09:11:00+09:00",
+          "in_person": false,
+          "expect": "CARD_STALE"
+        }
+      ],
+      "final": "2099-01-01T09:10:00+09:00"
+    },
+    {
+      "name": "agent_id_changed",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICJnSUhqTlNNR0QvbDRZVFVlczVIRXlPZlNHeVdlUUZwb0RwaWFmQmxEU29ZakxGT2pkellMN2JndEIvdWJDOCtCUW1UT3BUOGpTa3FjNmxjN29NNlhEdz09Igp9Cg==",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "trusted"
+        },
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQteCIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOToxMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICIvNlArd0ViOWxIMWRjQWVvSGw3QWFvclhKUXVJdzlRRHJTZWF4UEVReUxPMTFNSStsa1pHQ29XT1EyVkFnRWcxd0l1MnpSMWwrWjVJRDl4Sm03dE9CQT09Igp9Cg==",
+          "now": "2099-01-01T09:11:00+09:00",
+          "in_person": false,
+          "expect": "CARD_IDENTITY_MISMATCH"
+        }
+      ],
+      "final": "2099-01-01T09:00:00+09:00"
+    },
+    {
+      "name": "failed_update_then_good",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICJnSUhqTlNNR0QvbDRZVFVlczVIRXlPZlNHeVdlUUZwb0RwaWFmQmxEU29ZakxGT2pkellMN2JndEIvdWJDOCtCUW1UT3BUOGpTa3FjNmxjN29NNlhEdz09Igp9Cg==",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "trusted"
+        },
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiQ2hhbmdlZCIsCiAgInByb3RvY29sX3ZlcnNpb25zIjogWwogICAgImF1bi8wLjMiCiAgXSwKICAicmVsYXlfZW5kcG9pbnQiOiAiaHR0cHM6Ly9yZWxheS5leGFtcGxlL2F1bi9hMiIsCiAgImlzc3VlZF9hdCI6ICIyMDk5LTAxLTAxVDA5OjEwOjAwKzA5OjAwIiwKICAic2lnbmF0dXJlIjogImJmTVVkM0pmaWlwVWxTcEZoMWVwSktybG5hc2c5R1pPbGg1d2lGRmxLc3dWUFhpeTJ0Q3BxSHV5b3BsWVBFOWxuNVFzb0IvVTEzRkVMYVVMVUF2TUF3PT0iCn0K",
+          "now": "2099-01-01T09:11:00+09:00",
+          "in_person": false,
+          "expect": "CARD_SIGNATURE_INVALID"
+        },
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIChuZXcpIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EyIiwKICAiaXNzdWVkX2F0IjogIjIwOTktMDEtMDFUMDk6MTA6MDArMDk6MDAiLAogICJzaWduYXR1cmUiOiAiYmZNVWQzSmZpaXBVbFNwRmgxZXBKS3JsbmFzZzlHWk9saDV3aUZGbEtzd1ZQWGl5MnRDcHFIdXlvcGxZUEU5bG41UXNvQi9VMTNGRUxhVUxVQXZNQXc9PSIKfQo=",
+          "now": "2099-01-01T09:11:00+09:00",
+          "in_person": false,
+          "expect": "updated"
+        }
+      ],
+      "final": "2099-01-01T09:10:00+09:00"
+    },
+    {
+      "name": "far_future_then_good",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICJnSUhqTlNNR0QvbDRZVFVlczVIRXlPZlNHeVdlUUZwb0RwaWFmQmxEU29ZakxGT2pkellMN2JndEIvdWJDOCtCUW1UT3BUOGpTa3FjNmxjN29NNlhEdz09Igp9Cg==",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "trusted"
+        },
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjEwMC0wMS0wMVQwMDowMDowMFoiLAogICJzaWduYXR1cmUiOiAiVXlDMUVHbDZmeW1kbnFjL056MVVwUXUwZEx5UXByeVpYUVFRTi9TSWlMeFlzUVdtbDJDWGdZTjRldGgwbCtVeW5ZdVVFZEE5MC9QQ1FHNkNnWkM3REE9PSIKfQo=",
+          "now": "2099-01-01T09:11:00+09:00",
+          "in_person": false,
+          "expect": "CARD_NOT_YET_VALID"
+        },
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIChuZXcpIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EyIiwKICAiaXNzdWVkX2F0IjogIjIwOTktMDEtMDFUMDk6MTA6MDArMDk6MDAiLAogICJzaWduYXR1cmUiOiAiYmZNVWQzSmZpaXBVbFNwRmgxZXBKS3JsbmFzZzlHWk9saDV3aUZGbEtzd1ZQWGl5MnRDcHFIdXlvcGxZUEU5bG41UXNvQi9VMTNGRUxhVUxVQXZNQXc9PSIKfQo=",
+          "now": "2099-01-01T09:11:00+09:00",
+          "in_person": false,
+          "expect": "updated"
+        }
+      ],
+      "final": "2099-01-01T09:10:00+09:00"
+    },
+    {
+      "name": "other_peer_update",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICJnSUhqTlNNR0QvbDRZVFVlczVIRXlPZlNHeVdlUUZwb0RwaWFmQmxEU29ZakxGT2pkellMN2JndEIvdWJDOCtCUW1UT3BUOGpTa3FjNmxjN29NNlhEdz09Igp9Cg==",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "trusted"
+        },
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF9jY2RmODQ4ZDhkMGI3OTIxIiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYyIsCiAgInB1YmxpY19rZXkiOiAid1JvZWl1eXFaaFVvM2lIdUVKOXpCdlJUZzRhVjZ5SlVVUFdndzVtOVRjbz0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBDIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2MiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICJXcm1Pc2V3em9YRFlUUEFpdFlNN1A4bFBkbWR2YWduZ1AzN2hKQzhNYThETGpKallsQWltZjhtRU1oYkZYL3FkZlJ2TjlKY1ZHMFd0bVh0VE83S2hEUT09Igp9Cg==",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "trusted"
+        },
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF9jY2RmODQ4ZDhkMGI3OTIxIiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYyIsCiAgInB1YmxpY19rZXkiOiAid1JvZWl1eXFaaFVvM2lIdUVKOXpCdlJUZzRhVjZ5SlVVUFdndzVtOVRjbz0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBDIChuZXcpIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2MiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOToxMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICJQL3NReW1ITllxV0IyY0hITnEyay9VMVNzc2srUTh1ajN4d1NiWTNGU25sRys1Q3Y4Z0FLbTdPSi84dWQ0SHFaNlBja0laTmpkQ2tzano0aFBzandBZz09Igp9Cg==",
+          "now": "2099-01-01T09:11:00+09:00",
+          "in_person": false,
+          "expect": "updated"
+        }
+      ],
+      "final": "2099-01-01T09:00:00+09:00"
+    },
+    {
+      "name": "node_id_not_derived",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYyIsCiAgInB1YmxpY19rZXkiOiAid1JvZWl1eXFaaFVvM2lIdUVKOXpCdlJUZzRhVjZ5SlVVUFdndzVtOVRjbz0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBDIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2MiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICJDWkpKUC80WCtlL1BrYk85ZXdKdzUxNm4ydlRsRXFORHdTckpsY3hiUmVnQlVINDdrS1EzUVNod3BkeEVQUnZUUmpKSlBWRXJZUzh2QzFnNVc5VVJDZz09Igp9Cg==",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "CARD_IDENTITY_MISMATCH"
+        }
+      ],
+      "final": null
+    },
+    {
+      "name": "signed_by_other_key",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICJlT1RIUGJscDJoWDFsdkxYb3VxbFgxTUdEUnRqam53c295Mnd6YmthMVdZb01pV3F0b3pyUFloTjR3THhpZEwzbUtWQi9ZOGFOWXRCZlZ0a3JGek5CQT09Igp9Cg==",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "CARD_SIGNATURE_INVALID"
+        }
+      ],
+      "final": null
+    },
+    {
+      "name": "tampered_after_signing",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiQ2hhbmdlZCIsCiAgInByb3RvY29sX3ZlcnNpb25zIjogWwogICAgImF1bi8wLjMiCiAgXSwKICAicmVsYXlfZW5kcG9pbnQiOiAiaHR0cHM6Ly9yZWxheS5leGFtcGxlL2F1bi9hIiwKICAiaXNzdWVkX2F0IjogIjIwOTktMDEtMDFUMDk6MDA6MDArMDk6MDAiLAogICJzaWduYXR1cmUiOiAiZ0lIak5TTUdEL2w0WVRVZXM1SEV5T2ZTR3lXZVFGcG9EcGlhZkJsRFNvWWpMRk9qZHpZTDdiZ3RCL3ViQzgrQlFtVE9wVDhqU2txYzZsYzdvTTZYRHc9PSIKfQo=",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "CARD_SIGNATURE_INVALID"
+        }
+      ],
+      "final": null
+    },
+    {
+      "name": "version_only_0_2",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMiIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICJENDhBWVFoRFZQeFh3TXlSNExXTy9DUnV4VzNUdWpjblRHUy90YW04QkYwaDRrSHRyYk5maGozTUxobmdLL2l6RmpvcHhXT3d0SGF2Z1VRVnRNMEVEQT09Igp9Cg==",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "CARD_VERSION_UNSUPPORTED"
+        }
+      ],
+      "final": null
+    },
+    {
+      "name": "version_unknown_extra",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIsCiAgICAiYXVuLzkuOSIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICJsNHdsSlkyTXJ1b3VmWVkrU2FXRnM3U2FsR0crekVtaWdmTjhHcDlicElrYXdzVzFTM0dZck9nRmx0MnpkOEgzT1VUQkZFZkdicWJNQmxXKzczSFNDUT09Igp9Cg==",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "trusted"
+        }
+      ],
+      "final": "2099-01-01T09:00:00+09:00"
+    },
+    {
+      "name": "clock_301_ahead",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICJnSUhqTlNNR0QvbDRZVFVlczVIRXlPZlNHeVdlUUZwb0RwaWFmQmxEU29ZakxGT2pkellMN2JndEIvdWJDOCtCUW1UT3BUOGpTa3FjNmxjN29NNlhEdz09Igp9Cg==",
+          "now": "2099-01-01T08:54:59+09:00",
+          "in_person": true,
+          "expect": "CARD_NOT_YET_VALID"
+        }
+      ],
+      "final": null
+    },
+    {
+      "name": "clock_300_ahead",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICJnSUhqTlNNR0QvbDRZVFVlczVIRXlPZlNHeVdlUUZwb0RwaWFmQmxEU29ZakxGT2pkellMN2JndEIvdWJDOCtCUW1UT3BUOGpTa3FjNmxjN29NNlhEdz09Igp9Cg==",
+          "now": "2099-01-01T08:55:00+09:00",
+          "in_person": true,
+          "expect": "trusted"
+        }
+      ],
+      "final": "2099-01-01T09:00:00+09:00"
+    },
+    {
+      "name": "one_year_old",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICJnSUhqTlNNR0QvbDRZVFVlczVIRXlPZlNHeVdlUUZwb0RwaWFmQmxEU29ZakxGT2pkellMN2JndEIvdWJDOCtCUW1UT3BUOGpTa3FjNmxjN29NNlhEdz09Igp9Cg==",
+          "now": "2100-01-01T09:00:00+09:00",
+          "in_person": true,
+          "expect": "trusted"
+        }
+      ],
+      "final": "2099-01-01T09:00:00+09:00"
+    },
+    {
+      "name": "size_2049",
+      "steps": [
+        {
+          "card": "eyAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgCiAgInZlcnNpb24iOiAiYXVuLWNhcmQvMSIsCiAgIm5vZGVfaWQiOiAiYWd0XzI5MWUxZGYyN2NjMWYwZjkiLAogICJhZ2VudF9pZCI6ICJhZ2VudC1hIiwKICAicHVibGljX2tleSI6ICI1eUg5K0xseGZURk9iRVB1VGk2SkxNbG85b20vTDVmM3RhTmJYdkZnQ2pVPSIsCiAgImRpc3BsYXlfbmFtZSI6ICJOb2RlIEEiLAogICJwcm90b2NvbF92ZXJzaW9ucyI6IFsKICAgICJhdW4vMC4zIgogIF0sCiAgInJlbGF5X2VuZHBvaW50IjogImh0dHBzOi8vcmVsYXkuZXhhbXBsZS9hdW4vYSIsCiAgImlzc3VlZF9hdCI6ICIyMDk5LTAxLTAxVDA5OjAwOjAwKzA5OjAwIiwKICAic2lnbmF0dXJlIjogImdJSGpOU01HRC9sNFlUVWVzNUhFeU9mU0d5V2VRRnBvRHBpYWZCbERTb1lqTEZPamR6WUw3Ymd0Qi91YkM4K0JRbVRPcFQ4alNrcWM2bGM3b002WER3PT0iCn0K",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "CARD_TOO_LARGE"
+        }
+      ],
+      "final": null
+    },
+    {
+      "name": "size_2048",
+      "steps": [
+        {
+          "card": "eyAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAidmVyc2lvbiI6ICJhdW4tY2FyZC8xIiwKICAibm9kZV9pZCI6ICJhZ3RfMjkxZTFkZjI3Y2MxZjBmOSIsCiAgImFnZW50X2lkIjogImFnZW50LWEiLAogICJwdWJsaWNfa2V5IjogIjV5SDkrTGx4ZlRGT2JFUHVUaTZKTE1sbzlvbS9MNWYzdGFOYlh2RmdDalU9IiwKICAiZGlzcGxheV9uYW1lIjogIk5vZGUgQSIsCiAgInByb3RvY29sX3ZlcnNpb25zIjogWwogICAgImF1bi8wLjMiCiAgXSwKICAicmVsYXlfZW5kcG9pbnQiOiAiaHR0cHM6Ly9yZWxheS5leGFtcGxlL2F1bi9hIiwKICAiaXNzdWVkX2F0IjogIjIwOTktMDEtMDFUMDk6MDA6MDArMDk6MDAiLAogICJzaWduYXR1cmUiOiAiZ0lIak5TTUdEL2w0WVRVZXM1SEV5T2ZTR3lXZVFGcG9EcGlhZkJsRFNvWWpMRk9qZHpZTDdiZ3RCL3ViQzgrQlFtVE9wVDhqU2txYzZsYzdvTTZYRHc9PSIKfQo=",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "trusted"
+        }
+      ],
+      "final": "2099-01-01T09:00:00+09:00"
+    },
+    {
+      "name": "extra_field",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgImV4dHJhIjogIngiLAogICJzaWduYXR1cmUiOiAibGxxNGpyS3NKcUlYNXVLZHpuWnZBak10VjJCRzNERDk1bVFBNjRxelRYbFN3b29WTVJxRjA0NFlWdmFOUmdXNHkvRkRyamtYQUI5UDczeFlrMTRoQnc9PSIKfQo=",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "CARD_SCHEMA_INVALID"
+        }
+      ],
+      "final": null
+    },
+    {
+      "name": "missing_relay_endpoint",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICIzQTZDYjJFc1NMRWc1QkRFdjFYS09YaGF0N3pQV1lCMHhSQTF1OGtsWWxSTmJINzJ1MUhBdW84SCs1azdKeDhFb1ZVM0Rwbjl5Mkgxd1lIanl3QXRCdz09Igp9Cg==",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "CARD_SCHEMA_INVALID"
+        }
+      ],
+      "final": null
+    },
+    {
+      "name": "empty_display_name",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICJmS2VRdnFreDNNbGFCMG9nRXRkanhGczZ2b3BYZ2IvMFludTFUSWZxRkFJb0ZYYWFla051d1B3MURYbHR5SlV3d2t4aCtXOW50aGc0TmRtdG1CZVVDZz09Igp9Cg==",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "CARD_SCHEMA_INVALID"
+        }
+      ],
+      "final": null
+    },
+    {
+      "name": "display_name_101_code_points",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAi44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GCIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICJQYWVlN2NtVDFUZ2ZBQ3BSdk1sb09qelZNbjFFVU9TQ0RzM0xVRk1vb2kvaWVCOEc3VnhGS2Q0ZmZ3UGhmWXdLWDIram96bWRiQWgyQ3ZEa01aUzlEUT09Igp9Cg==",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "CARD_SCHEMA_INVALID"
+        }
+      ],
+      "final": null
+    },
+    {
+      "name": "display_name_100_code_points",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAi44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GC44GCIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICI4aDREdmVaaDB0TFhLS2pCdDBtangvRy9XUmV5SFpJcWYvemVxUUgvWUV0OXJtVGpCS2N0TXF3dzU0YS9uZVJ5OHdyNlc4V1FNYzlzSnVvVlBGajhBQT09Igp9Cg==",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "trusted"
+        }
+      ],
+      "final": "2099-01-01T09:00:00+09:00"
+    },
+    {
+      "name": "http_endpoint",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwOi8vcmVsYXkuZXhhbXBsZS9hdW4vYSIsCiAgImlzc3VlZF9hdCI6ICIyMDk5LTAxLTAxVDA5OjAwOjAwKzA5OjAwIiwKICAic2lnbmF0dXJlIjogIjZTbGpYc1pYL1RyWVlPYnZnUS9XS1BKdG0xYWZDODNZK0xwSkxmcTluWk95a2hBVTlXc2VTNlNGNzUzTDBiOVFPd3ZnTW1xamt0cURiQWlVNGNOYUF3PT0iCn0K",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "CARD_SCHEMA_INVALID"
+        }
+      ],
+      "final": null
+    },
+    {
+      "name": "space_in_endpoint",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYSB1biIsCiAgImlzc3VlZF9hdCI6ICIyMDk5LTAxLTAxVDA5OjAwOjAwKzA5OjAwIiwKICAic2lnbmF0dXJlIjogIldQK0s4eUNaSjFGdU1jTjlGVlVMc081QlltRE1Qajh6SEVFWnkrcDdUWXVNUmxKQmpLK1JRWXB6Vmd4UEg0OUtLSXNmbjhqd3M5Q1kwTmpYb3JXZUJ3PT0iCn0K",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "CARD_SCHEMA_INVALID"
+        }
+      ],
+      "final": null
+    },
+    {
+      "name": "empty_versions",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbXSwKICAicmVsYXlfZW5kcG9pbnQiOiAiaHR0cHM6Ly9yZWxheS5leGFtcGxlL2F1bi9hIiwKICAiaXNzdWVkX2F0IjogIjIwOTktMDEtMDFUMDk6MDA6MDArMDk6MDAiLAogICJzaWduYXR1cmUiOiAiYThqd0xMOVlaYmlsclEvZW5EUFEzWnZicjBCbEpyTkFjTzF5Z1NzRzFGbTdRUmNqdDV5bTdidUhRbFlnRUx2NW1NOEg1QnNQZ2VqR05tcGdEOGNEQWc9PSIKfQo=",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "CARD_SCHEMA_INVALID"
+        }
+      ],
+      "final": null
+    },
+    {
+      "name": "duplicate_versions",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIsCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICJGMVJUWktmL2laTElTTlFkWWh2cUd2WVJRcWFKeWIvNFhFNmJoRytVZDljN2VvQkhIS2IvUzFrbmMyYjZlM1JkQUpPeExCbkxodU1PeC8xejhnbzBBdz09Igp9Cg==",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "CARD_SCHEMA_INVALID"
+        }
+      ],
+      "final": null
+    },
+    {
+      "name": "version_aun_card_2",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzIiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICJscWRlKzc1L1JnajB3bjZTTFpTdGtvVHRuNU5VQUdEdTVQWlppd0hxNHNrclhpNkEvcGdPcFNOSHZNT0N0aHo4NTdGME1FZ3RUNXoyREZnMXZMWHZBZz09Igp9Cg==",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "CARD_SCHEMA_INVALID"
+        }
+      ],
+      "final": null
+    },
+    {
+      "name": "public_key_spare_bits",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVj0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICIySmFOVDBvQjJlN1RvSWthUTRnQnduQ0RqSm9lWkl0RTc1ZEp1ZW5uYWM5R1gyWTY3enA3TzVwUHB6NXRydzU5OVN2Q0ZHNDUvakhFUStlRjFraVZDdz09Igp9Cg==",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "CARD_SCHEMA_INVALID"
+        }
+      ],
+      "final": null
+    },
+    {
+      "name": "signature_spare_bits",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICJnSUhqTlNNR0QvbDRZVFVlczVIRXlPZlNHeVdlUUZwb0RwaWFmQmxEU29ZakxGT2pkellMN2JndEIvdWJDOCtCUW1UT3BUOGpTa3FjNmxjN29NNlhEeD09Igp9Cg==",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "CARD_SCHEMA_INVALID"
+        }
+      ],
+      "final": null
+    },
+    {
+      "name": "february_30",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMi0zMFQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICJXWUhtVkNsYzdNTk1EWU9Lb0pSMmdNY0FPZjBJdFRUUlE5MXhLRTlrd3RrbnY3cDJFMURRTzdiQXBLaTBtTGJSTkFXeEFrVzIxN0t6QThTM01ESkVDQT09Igp9Cg==",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "CARD_SCHEMA_INVALID"
+        }
+      ],
+      "final": null
+    },
+    {
+      "name": "duplicate_json_key",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgImFnZW50X2lkIjogImFnZW50LWEiLAogICJwdWJsaWNfa2V5IjogIjV5SDkrTGx4ZlRGT2JFUHVUaTZKTE1sbzlvbS9MNWYzdGFOYlh2RmdDalU9IiwKICAiZGlzcGxheV9uYW1lIjogIk5vZGUgQSIsCiAgInByb3RvY29sX3ZlcnNpb25zIjogWwogICAgImF1bi8wLjMiCiAgXSwKICAicmVsYXlfZW5kcG9pbnQiOiAiaHR0cHM6Ly9yZWxheS5leGFtcGxlL2F1bi9hIiwKICAiaXNzdWVkX2F0IjogIjIwOTktMDEtMDFUMDk6MDA6MDArMDk6MDAiLAogICJzaWduYXR1cmUiOiAiZ0lIak5TTUdEL2w0WVRVZXM1SEV5T2ZTR3lXZVFGcG9EcGlhZkJsRFNvWWpMRk9qZHpZTDdiZ3RCL3ViQzgrQlFtVE9wVDhqU2txYzZsYzdvTTZYRHc9PSIKfQo=",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "CARD_SCHEMA_INVALID"
+        }
+      ],
+      "final": null
+    },
+    {
+      "name": "byte_order_mark",
+      "steps": [
+        {
+          "card": "77u/ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICJnSUhqTlNNR0QvbDRZVFVlczVIRXlPZlNHeVdlUUZwb0RwaWFmQmxEU29ZakxGT2pkellMN2JndEIvdWJDOCtCUW1UT3BUOGpTa3FjNmxjN29NNlhEdz09Igp9Cg==",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "CARD_SCHEMA_INVALID"
+        }
+      ],
+      "final": null
+    },
+    {
+      "name": "float_value",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAxLjAKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICJnSUhqTlNNR0QvbDRZVFVlczVIRXlPZlNHeVdlUUZwb0RwaWFmQmxEU29ZakxGT2pkellMN2JndEIvdWJDOCtCUW1UT3BUOGpTa3FjNmxjN29NNlhEdz09Igp9Cg==",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "CARD_SCHEMA_INVALID"
+        }
+      ],
+      "final": null
+    },
+    {
+      "name": "not_an_object",
+      "steps": [
+        {
+          "card": "WwogIHsKICAgICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICAgIm5vZGVfaWQiOiAiYWd0XzI5MWUxZGYyN2NjMWYwZjkiLAogICAgImFnZW50X2lkIjogImFnZW50LWEiLAogICAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICAgImRpc3BsYXlfbmFtZSI6ICJOb2RlIEEiLAogICAgInByb3RvY29sX3ZlcnNpb25zIjogWwogICAgICAiYXVuLzAuMyIKICAgIF0sCiAgICAicmVsYXlfZW5kcG9pbnQiOiAiaHR0cHM6Ly9yZWxheS5leGFtcGxlL2F1bi9hIiwKICAgICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgICAic2lnbmF0dXJlIjogImdJSGpOU01HRC9sNFlUVWVzNUhFeU9mU0d5V2VRRnBvRHBpYWZCbERTb1lqTEZPamR6WUw3Ymd0Qi91YkM4K0JRbVRPcFQ4alNrcWM2bGM3b002WER3PT0iCiAgfQpdCg==",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "CARD_SCHEMA_INVALID"
+        }
+      ],
+      "final": null
+    },
+    {
+      "name": "too_large_and_bad_schema",
+      "steps": [
+        {
+          "card": "eyAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAKICAidmVyc2lvbiI6ICJhdW4tY2FyZC8xIiwKICAibm9kZV9pZCI6ICJhZ3RfMjkxZTFkZjI3Y2MxZjBmOSIsCiAgImFnZW50X2lkIjogImFnZW50LWEiLAogICJwdWJsaWNfa2V5IjogIjV5SDkrTGx4ZlRGT2JFUHVUaTZKTE1sbzlvbS9MNWYzdGFOYlh2RmdDalU9IiwKICAiZGlzcGxheV9uYW1lIjogIk5vZGUgQSIsCiAgInByb3RvY29sX3ZlcnNpb25zIjogWwogICAgImF1bi8wLjMiCiAgXSwKICAicmVsYXlfZW5kcG9pbnQiOiAiaHR0cHM6Ly9yZWxheS5leGFtcGxlL2F1bi9hIiwKICAiaXNzdWVkX2F0IjogIjIwOTktMDEtMDFUMDk6MDA6MDArMDk6MDAiLAogICJleHRyYSI6ICJ4IiwKICAic2lnbmF0dXJlIjogImxscTRqcktzSnFJWDV1S2R6blp2QWpNdFYyQkczREQ5NW1RQTY0cXpUWGxTd29vVk1ScUYwNDRZVnZhTlJnVzR5L0ZEcmprWEFCOVA3M3hZazE0aEJ3PT0iCn0K",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "CARD_TOO_LARGE"
+        }
+      ],
+      "final": null
+    },
+    {
+      "name": "bad_node_id_and_bad_signature",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF9jY2RmODQ4ZDhkMGI3OTIxIiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICJZZGZZRHByb1Ztell2MlNZQkdQSHdPNmE4SUxxZWR0Mm5KTUE2QnBuWHFuSzVSeDUvNS9VeWNtaEdBeVhDaU1GT2RJQXphYVlrTHNVT2dHd1NmTlVCZz09Igp9Cg==",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "CARD_IDENTITY_MISMATCH"
+        }
+      ],
+      "final": null
+    },
+    {
+      "name": "bad_signature_and_bad_version",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMiIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICI5bUZRV3A3dzhxeW5WMHNERHJ4QnhxM1ZmRUFUODlsWHpwT1dEWFJJM1VvM0xWN3ZURFcrbFZtdHJZYTBGdTAzSWNJNE5nYjVkd1JUMkpGeVVWM1RBQT09Igp9Cg==",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "CARD_SIGNATURE_INVALID"
+        }
+      ],
+      "final": null
+    },
+    {
+      "name": "bad_version_and_future",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMiIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICJENDhBWVFoRFZQeFh3TXlSNExXTy9DUnV4VzNUdWpjblRHUy90YW04QkYwaDRrSHRyYk5maGozTUxobmdLL2l6RmpvcHhXT3d0SGF2Z1VRVnRNMEVEQT09Igp9Cg==",
+          "now": "2099-01-01T08:00:00+09:00",
+          "in_person": true,
+          "expect": "CARD_VERSION_UNSUPPORTED"
+        }
+      ],
+      "final": null
+    },
+    {
+      "name": "future_and_not_in_person",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAiTm9kZSBBIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICJnSUhqTlNNR0QvbDRZVFVlczVIRXlPZlNHeVdlUUZwb0RwaWFmQmxEU29ZakxGT2pkellMN2JndEIvdWJDOCtCUW1UT3BUOGpTa3FjNmxjN29NNlhEdz09Igp9Cg==",
+          "now": "2099-01-01T08:00:00+09:00",
+          "in_person": false,
+          "expect": "CARD_NOT_YET_VALID"
+        }
+      ],
+      "final": null
+    },
+    {
+      "name": "ideographic_space_name",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzEiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5IiwKICAiYWdlbnRfaWQiOiAiYWdlbnQtYSIsCiAgInB1YmxpY19rZXkiOiAiNXlIOStMbHhmVEZPYkVQdVRpNkpMTWxvOW9tL0w1ZjN0YU5iWHZGZ0NqVT0iLAogICJkaXNwbGF5X25hbWUiOiAi44CAIiwKICAicHJvdG9jb2xfdmVyc2lvbnMiOiBbCiAgICAiYXVuLzAuMyIKICBdLAogICJyZWxheV9lbmRwb2ludCI6ICJodHRwczovL3JlbGF5LmV4YW1wbGUvYXVuL2EiLAogICJpc3N1ZWRfYXQiOiAiMjA5OS0wMS0wMVQwOTowMDowMCswOTowMCIsCiAgInNpZ25hdHVyZSI6ICJ2UUorTkFmWkJVTGsvc2l1S3VTOGFZTHc5cVF2MDFGbjYvOFFkUjh2VmNUL3JwRk5hRXlHRnF5VGF0eEhJZy9kSDZiTzg0VjJDNjFMaFdYMjAzRklEZz09Igp9Cg==",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "trusted"
+        }
+      ],
+      "final": "2099-01-01T09:00:00+09:00"
+    }
+  ]
+}
