@@ -1,0 +1,33 @@
+{
+  "protocol": "aun/0.2",
+  "message_id": "63e9b3baafd6f33256210700530e5bd2",
+  "session_id": "session-meeting-schedule-no-slot",
+  "sender_agent_id": "agent-a",
+  "receiver_agent_id": "agent-b",
+  "sender_node_id": "agt_291e1df27cc1f0f9",
+  "receiver_node_id": "agt_ca07afd7b2241f78",
+  "message_type": "COUNTER",
+  "intent": "meeting.schedule",
+  "session_version": 1,
+  "sequence": 4,
+  "payload": {
+    "public_reason": "no_common_slot"
+  },
+  "delta": {
+    "candidate_slots": [
+      {
+        "start": "2099-01-01T13:00+09:00",
+        "end": "2099-01-01T13:30+09:00"
+      },
+      {
+        "start": "2099-01-01T13:30+09:00",
+        "end": "2099-01-01T14:00+09:00"
+      }
+    ]
+  },
+  "requires_human_approval": false,
+  "nonce": "d4a7008bf4db41bd8e2588c6e92af02f",
+  "created_at": "2099-01-01T09:00:30+09:00",
+  "payload_hash": "95b72792f1a12e178ccb7abf7f9eae1d2f83c4d72f58c739f3dfb617f99c08cd",
+  "signature": "/nORk2llxkvpuc8XM8aNMgAVBMNyx8MmqWpLhCTM9XRQho5L50DMaLfIFP8vfRwQRPHaoos+n89rfQLKnjw2Bg=="
+}

@@ -1,0 +1,35 @@
+{
+  "protocol": "aun/0.2",
+  "message_id": "6c4ed37d64efc4eeb3e72077972d38dc",
+  "session_id": "session-meeting-schedule-no-slot",
+  "sender_agent_id": "agent-a",
+  "receiver_agent_id": "agent-b",
+  "sender_node_id": "agt_291e1df27cc1f0f9",
+  "receiver_node_id": "agt_ca07afd7b2241f78",
+  "message_type": "REQUEST",
+  "intent": "meeting.schedule",
+  "session_version": 1,
+  "sequence": 1,
+  "payload": {
+    "intent": "meeting.schedule",
+    "topic": "Project sync",
+    "duration_minutes": 30,
+    "date_range": {
+      "start": "2099-01-01",
+      "end": "2099-01-01"
+    },
+    "preferred_time_ranges": [
+      {
+        "start": "13:00",
+        "end": "15:00"
+      }
+    ],
+    "timezone": "Asia/Tokyo"
+  },
+  "delta": {},
+  "requires_human_approval": false,
+  "nonce": "a9d6e7d91bde3611070fe5c118b5f5de",
+  "created_at": "2099-01-01T09:00:00+09:00",
+  "payload_hash": "472da822367f3c1107a7fb2d1f698d6b337a28ba62bb5d03c6ddc0768f2c9c0f",
+  "signature": "YxAPZyrWfvEmS1MX7bWZt9CEgBv5Z0dtV3k4mGF96B2louFMwy+KAzXavgfiuERwEXNYzrrLwzGAcIB1vjN4BA=="
+}

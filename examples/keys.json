@@ -1,0 +1,17 @@
+{
+  "WARNING": "TEST ONLY - never use these keys. The seeds are derived from public strings and are published here so the examples can be reproduced.",
+  "nodes": {
+    "a": {
+      "personal_agent_id": "agent-a",
+      "node_id": "agt_291e1df27cc1f0f9",
+      "public_key": "5yH9+LlxfTFObEPuTi6JLMlo9om/L5f3taNbXvFgCjU=",
+      "seed_hex": "0ee495c0ca421918dd67a0ef69cb1f3a4f9eeb0b19cf5194901ec5aff1718637"
+    },
+    "b": {
+      "personal_agent_id": "agent-b",
+      "node_id": "agt_ca07afd7b2241f78",
+      "public_key": "ny9olPZA86PrrqKq4Zfafzj4/p1/+6DGKmrCIPKzFg0=",
+      "seed_hex": "785707a1fd336f1676057b4928abeffbfdbcaba981c0148f51cec48448a4c6fe"
+    }
+  }
+}

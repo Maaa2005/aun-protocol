@@ -11,6 +11,34 @@ implementation rejects it. The machine-readable contract is
 (JSON Schema 2020-12). The canonicalization vectors are in
 [test-vectors/jcs-v0.2.json](test-vectors/jcs-v0.2.json).
 
+## Overview
+
+```mermaid
+sequenceDiagram
+    participant I as Initiator
+    participant R as Responder
+    I->>R: REQUEST (seq 1)
+    Note over R: validate, record session, no reply
+    I->>R: PROPOSE (seq 2)
+    Note over R: apply local policy
+    opt Policy requires a human decision (local step, not a wire message)
+        Note over R: human approves, rejects, or lets it expire
+    end
+    alt Agreement
+        R->>I: ACCEPT
+    else Different offer
+        R->>I: COUNTER
+        Note over I,R: replies alternate, at most 3 COUNTER in total
+        I->>R: ACCEPT, COUNTER, REJECT or ERROR
+    else Declined
+        R->>I: REJECT
+    else Cannot continue
+        R->>I: ERROR
+    end
+```
+
+Details of each step are in sections 4 and 6.
+
 ## 1. Model
 
 - A **node** is one device. It has an Ed25519 key pair. Its **node ID** is
@@ -442,3 +470,24 @@ checks in section 8.
   New third-party implementations must not use it.
 - Removal of 0.1 verification is planned for the next breaking protocol release.
 - A node lists the versions it supports in `capabilities.protocol_versions`.
+
+## 13. Examples and conformance
+
+This section is informative.
+
+- [examples/](examples/) holds signed example sessions for `meeting.schedule`
+  (with and without a common slot) and `cost.split` (counter and accept, and a
+  human rejection). The keys in [examples/keys.json](examples/keys.json) are
+  derived from public strings. They are for tests only and must never be used
+  for real messages.
+- [tools/aun_reference.py](tools/aun_reference.py) is a small reference for
+  sections 1 and 7: node ID derivation, signing, and verification of schema,
+  signature, payload hash and time window.
+- [tools/make_examples.py](tools/make_examples.py) regenerates the examples
+  byte for byte.
+- `pytest -q` runs [tests/test_conformance.py](tests/test_conformance.py). It
+  reproduces the JCS vectors, verifies every example and checks that each
+  session follows the transitions of section 4.
+
+The examples do not cover the state-based checks of section 8, such as replay
+detection and peer trust.

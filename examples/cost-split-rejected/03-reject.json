@@ -1,0 +1,24 @@
+{
+  "protocol": "aun/0.2",
+  "message_id": "dec17232ae6b4ebf467a2e61c45d00cc",
+  "session_id": "session-cost-split-rejected",
+  "sender_agent_id": "agent-b",
+  "receiver_agent_id": "agent-a",
+  "sender_node_id": "agt_ca07afd7b2241f78",
+  "receiver_node_id": "agt_291e1df27cc1f0f9",
+  "message_type": "REJECT",
+  "intent": "cost.split",
+  "session_version": 1,
+  "sequence": 3,
+  "payload": {
+    "public_reason": "policy_declined"
+  },
+  "delta": {
+    "code": "HUMAN_REJECTED"
+  },
+  "requires_human_approval": false,
+  "nonce": "ff1f18b1de05b37a6e99ff8713e420f2",
+  "created_at": "2099-01-01T09:00:20+09:00",
+  "payload_hash": "90c68b697917fe6aa5043eb53d680e2fab3be7f24b3dfdd16fc16bef42c4b75f",
+  "signature": "ZZesGGMWbbt1rXSLY9ZW7HGnI3iraAwpF8s41IXBxUj6bFkDLnhzrVF3zVoHv7Bm/vCVP86RpwjfpPVVv0g5DA=="
+}
