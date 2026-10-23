@@ -1,0 +1,44 @@
+{
+  "protocol": "aun/0.3",
+  "message_id": "8630abc799b517aebc02d9e6d7e3d994",
+  "session_id": "session-gift-pick",
+  "sender_agent_id": "agent-a",
+  "receiver_agent_id": "agent-b",
+  "sender_node_id": "agt_291e1df27cc1f0f9",
+  "receiver_node_id": "agt_ca07afd7b2241f78",
+  "message_type": "REQUEST",
+  "intent": "gift.pick",
+  "session_version": 1,
+  "sequence": 1,
+  "payload": {
+    "topic": "Joint birthday gift for a friend",
+    "expires_at": "2099-01-02T09:00:00+09:00",
+    "issues": [
+      {
+        "name": "gift",
+        "kind": "choice"
+      },
+      {
+        "name": "budget",
+        "kind": "amount",
+        "unit": "JPY",
+        "scale": 0,
+        "min": 1000,
+        "max": 5000,
+        "step": 500
+      }
+    ]
+  },
+  "delta": {
+    "offer": [
+      {
+        "gift": "Coffee beans",
+        "budget": 3000
+      }
+    ]
+  },
+  "nonce": "9be6f2280c169241b44a6e9f675ec8dc",
+  "created_at": "2099-01-01T09:00:00+09:00",
+  "payload_hash": "9364f7fb55776d1b302d74758fc32ac3cc05ac0aa06a8cce1ae6bb48a494ae52",
+  "signature": "7VEEp2bSk1laDEqoHWM6e3z1T/LPIisOiaGH4dbTjnLBMhdjTmHOTP6UWI2M+7peIBs8FspGIsCsSpZ1285NDg=="
+}
