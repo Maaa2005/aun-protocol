@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://enishi.local/schemas/negotiation-message.schema.json",
+  "title": "AUN Protocol 0.2 Negotiation Message",
+  "description": "enishi.md §25 のエージェント間共通メッセージ形式",
+  "type": "object",
+  "properties": {
+    "protocol": {
+      "type": "string",
+      "const": "aun/0.2"
+    },
+    "message_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sender_agent_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "receiver_agent_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sender_node_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "receiver_node_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "message_type": {
+      "type": "string",
+      "enum": [
+        "REQUEST",
+        "PROPOSE",
+        "COUNTER",
+        "ACCEPT",
+        "REJECT",
+        "REQUEST_APPROVAL",
+        "APPROVAL_RESULT",
+        "EXECUTE",
+        "RECEIPT",
+        "ERROR"
+      ]
+    },
+    "intent": {
+      "type": "string",
+      "minLength": 1
+    },
+    "session_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "payload": {
+      "type": "object",
+      "properties": {
+        "public_reason": {
+          "type": "string",
+          "enum": ["no_common_slot", "constraint_violation", "policy_declined"]
+        }
+      },
+      "additionalProperties": true
+    },
+    "delta": {
+      "type": "object"
+    },
+    "requires_human_approval": {
+      "type": "boolean"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "nonce": {
+      "type": "string",
+      "minLength": 1
+    },
+    "payload_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "signature": {
+      "type": "string",
+      "minLength": 1
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "protocol",
+    "message_id",
+    "session_id",
+    "sender_agent_id",
+    "receiver_agent_id",
+    "sender_node_id",
+    "receiver_node_id",
+    "message_type",
+    "intent",
+    "session_version",
+    "sequence",
+    "payload",
+    "delta",
+    "requires_human_approval",
+    "nonce",
+    "created_at",
+    "payload_hash",
+    "signature"
+  ],
+  "additionalProperties": false
+}
