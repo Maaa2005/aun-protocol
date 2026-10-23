@@ -1,15 +1,25 @@
-# AUN Protocol 0.2 Specification
+# AUN Protocol 0.3 Specification
 
-AUN is the wire protocol ENISHI agents use to negotiate with each other. This
-document describes the message format, the message flow, and the checks a
-receiver performs, so that a third party can implement a compatible node.
+AUN lets two personal AI agents agree on a small set of terms on behalf of
+their humans: a time, a place, an amount, a yes or no, or any mix of them. The
+name comes from *a-un no kokyu*, two people who agree without many words. Each
+agent discloses only the options its human approved, and the human keeps the
+final say.
 
-This document describes the behavior of the reference implementation (ENISHI
-Local Core). Where it says a receiver rejects something, the reference
-implementation rejects it. The machine-readable contract is
+0.3 is a breaking change from 0.2. 0.2 negotiated only meetings and cost
+shares, each with its own payload. 0.3 has one generic format: the request
+declares the terms, and every later message offers or accepts complete
+packages of values. The 0.2 specification is frozen at tag
+[`v0.2.0`](https://github.com/Maaa2005/aun-protocol/tree/v0.2.0).
+
+The machine-readable contract is
 [schemas/negotiation-message.schema.json](schemas/negotiation-message.schema.json)
-(JSON Schema 2020-12). The canonicalization vectors are in
-[test-vectors/jcs-v0.2.json](test-vectors/jcs-v0.2.json).
+(JSON Schema 2020-12). The schema checks shapes only. The rules that relate a
+package to its declaration or to the standing offer are in section 6.
+[tools/aun_reference.py](tools/aun_reference.py) implements sections 5, 6, 8
+and 9 and is the executable reading of this document.
+
+The key words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119.
 
 ## Overview
 
@@ -17,477 +27,409 @@ implementation rejects it. The machine-readable contract is
 sequenceDiagram
     participant I as Initiator
     participant R as Responder
-    I->>R: REQUEST (seq 1)
-    Note over R: validate, record session, no reply
-    I->>R: PROPOSE (seq 2)
-    Note over R: apply local policy
-    opt Policy requires a human decision (local step, not a wire message)
-        Note over R: human approves, rejects, or lets it expire
-    end
-    alt Agreement
-        R->>I: ACCEPT
-    else Different offer
-        R->>I: COUNTER
-        Note over I,R: replies alternate, at most 3 COUNTER in total
-        I->>R: ACCEPT, COUNTER, REJECT or ERROR
-    else Declined
-        R->>I: REJECT
-    else Cannot continue
-        R->>I: ERROR
+    Note over I: human approves the opening offer
+    I->>R: REQUEST (seq 1): terms, deadline, offer
+    alt A package in the offer suits R
+        R->>I: ACCEPT (seq 2): agreed package
+    else None suits R
+        R->>I: COUNTER (seq 2): R's offer
+        Note over I,R: turns alternate, at most 3 COUNTER in total
+        I->>R: ACCEPT, COUNTER or REJECT
+    else R declines or will not handle the request
+        R->>I: REJECT or ERROR (seq 2)
     end
 ```
 
-Details of each step are in sections 4 and 6.
+When the first offer is acceptable, agreement takes 2 messages.
 
 ## 1. Model
 
-- A **node** is one device. It has an Ed25519 key pair. Its **node ID** is
-  `agt_` followed by the first 16 lowercase hex characters of the SHA-256 of the
-  raw 32-byte public key.
-- A **personal agent** is the party a node represents. Personal agent IDs say who
-  is represented. Node IDs bind transport and signatures to the device carrying
-  the exchange.
-- A **session** is one negotiation between two personal agents about one
-  `intent`. All messages of a session share `session_id`.
+- A **node** is one device holding an Ed25519 key pair.
+- A **personal agent** is the party a node represents. Its ID says who is
+  represented. The node ID binds signatures and transport to the device.
+- A **session** is one negotiation between two parties about one `intent`.
+  All its messages share `session_id`.
+- An **issue** is one term to agree on, for example `place` or `time`. The
+  `REQUEST` declares the issues of the session (section 4).
+- A **package** has one value for every declared issue. An **offer** is a list
+  of packages. Agreement is one package from the other side's last offer
+  (section 6).
 - A message is one signed JSON object, the **envelope**.
 
-## 2. Envelope
+## 2. Identity and envelope
 
-All fields are required. No other fields are allowed (`additionalProperties:
-false`).
+The **node ID** is `agt_` followed by the first 16 lowercase hex characters of
+the SHA-256 of the raw 32-byte Ed25519 public key.
+
+All 17 fields are required. No other field is allowed.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `protocol` | string | Always `"aun/0.2"`. |
-| `message_id` | string, non-empty | Unique per message. Used for replay detection. The reference sender uses a random UUID in hex. |
-| `session_id` | string, non-empty | Identifies the session. Chosen by the initiator in its first message. |
-| `sender_agent_id` | string, non-empty | Personal agent ID of the sender. |
-| `receiver_agent_id` | string, non-empty | Personal agent ID of the receiver. |
-| `sender_node_id` | string, non-empty | Node ID of the sending device. Its public key verifies `signature`. |
-| `receiver_node_id` | string, non-empty | Node ID of the receiving device. |
+| `protocol` | string | Always `"aun/0.3"`. |
+| `message_id` | id | Unique per message. |
+| `session_id` | id | Chosen by the initiator in `REQUEST`. |
+| `sender_agent_id` | id | Personal agent of the sender. |
+| `receiver_agent_id` | id | Personal agent of the receiver. |
+| `sender_node_id` | node ID | Device of the sender. Its key verifies `signature`. |
+| `receiver_node_id` | node ID | Device of the receiver. |
 | `message_type` | string | One of the types in section 3. |
-| `intent` | string, non-empty | What is being negotiated (section 5). Fixed for the whole session. |
-| `session_version` | integer, 1 or more | Version of the session terms. The reference implementation uses `1`. Must stay equal to the value recorded at session start. |
-| `sequence` | integer, 1 or more | Position in the session. Counts messages of both parties on one shared counter. Starts at 1 and increases by exactly 1 per message. |
-| `payload` | object | Public context. Carries the request details in `REQUEST` and `public_reason` in some replies. `{}` otherwise. |
-| `delta` | object | The change being proposed, answered or accepted. Not full state. |
-| `requires_human_approval` | boolean | The reference sender always sets `false`. A receiver stores the value but does not act on it. |
-| `nonce` | string, non-empty | Random value included in the signature. The reference sender uses 16 random bytes in hex. |
-| `created_at` | date-time string | Time the sender created the message. The reference receiver requires a timezone offset. |
-| `payload_hash` | string | Lowercase hex SHA-256 digest, 64 characters (section 7). |
-| `signature` | string, non-empty | Base64 of the 64-byte Ed25519 signature (section 7). |
+| `intent` | string | A dotted lowercase label naming the kind of agreement, for example `dinner.plan`. At most 64 characters, pattern `^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$`. Fixed for the session. |
+| `session_version` | integer 1 to 1000 | Fixed for the session. Senders use `1`. |
+| `sequence` | integer 1 to 5 | Position in the session, one counter shared by both parties. `REQUEST` is 1. Each message adds exactly 1. |
+| `payload` | object | Public context, by message type (section 3). |
+| `delta` | object | The offer, the agreed package, or a code (section 3). |
+| `nonce` | id | Random value, unique per sender node. |
+| `created_at` | date-time | When the sender created the message. Carries `Z` or an offset. |
+| `payload_hash` | string | 64 lowercase hex (section 8). |
+| `signature` | string | Base64 of the 64-byte Ed25519 signature (section 8). |
 
-`payload.public_reason`, when present, must be one of `no_common_slot`,
-`constraint_violation`, `policy_declined` (section 9). Other `payload` keys are
-allowed by the schema; their meaning depends on the intent.
+An **id** is a string of 1 to 128 characters. A **date-time** is RFC 3339
+with an offset, seconds optional.
 
-The schema does not set length limits on strings.
+0.2's `requires_human_approval` is removed. Approval is a local step
+(section 7), so a field that announced it carried no checkable meaning.
 
-Illustrative envelope (values shortened; `<...>` stands for a computed value):
+## 3. Message types
+
+| Type | Sent by | `payload` | `delta` |
+| --- | --- | --- | --- |
+| `REQUEST` | Initiator, `sequence` 1 | `{"topic", "expires_at", "issues"}` | `{"offer": [package, ...]}` |
+| `COUNTER` | Either party | `{"public_reason"}` | `{"offer": [package, ...]}` |
+| `ACCEPT` | Either party | `{}` | `{"agreed": package}` |
+| `REJECT` | Either party | `{"public_reason"}` | `{"code"}` |
+| `ERROR` | Responder, `sequence` 2 only | `{}` | `{"code": "NOT_SUPPORTED"}` |
+
+- `REQUEST.payload.topic`: 1 to 200 characters, shown to the other human.
+- `REQUEST.payload.expires_at`: the session deadline (section 5.3).
+- `REQUEST.payload.issues`: 1 to 8 issue declarations (section 4).
+- `ACCEPT`, `REJECT` and `ERROR` end the session. `REJECT` and `ERROR` codes
+  are in section 10.
+- `ERROR` answers a valid `REQUEST` that the receiver will not handle, for
+  example an intent it does not take. It is allowed only as the answer to
+  `REQUEST`. Later in a session the parties already handle the request, and
+  `REJECT` says no.
+
+Illustrative `REQUEST` (computed values shortened):
 
 ```json
 {
-  "protocol": "aun/0.2",
-  "message_id": "<uuid-hex>",
-  "session_id": "<session-id>",
-  "sender_agent_id": "<personal-agent-id-A>",
-  "receiver_agent_id": "<personal-agent-id-B>",
-  "sender_node_id": "agt_<16-hex>",
-  "receiver_node_id": "agt_<16-hex>",
-  "message_type": "PROPOSE",
-  "intent": "meeting.schedule",
+  "protocol": "aun/0.3",
+  "message_id": "<id>",
+  "session_id": "<id>",
+  "sender_agent_id": "agent-a",
+  "receiver_agent_id": "agent-b",
+  "sender_node_id": "agt_<16 hex>",
+  "receiver_node_id": "agt_<16 hex>",
+  "message_type": "REQUEST",
+  "intent": "dinner.plan",
   "session_version": 1,
-  "sequence": 2,
-  "payload": {},
-  "delta": {"candidate_slots": [{"start": "2099-01-01T00:00+09:00", "end": "2099-01-01T00:30+09:00"}]},
-  "requires_human_approval": false,
-  "nonce": "<hex>",
-  "created_at": "<ISO 8601 date-time with offset>",
-  "payload_hash": "<64 lowercase hex>",
+  "sequence": 1,
+  "payload": {
+    "topic": "Dinner on Friday",
+    "expires_at": "2099-01-02T09:00:00+09:00",
+    "issues": [
+      {"name": "place", "kind": "choice", "options": ["Sushi", "Pasta", "Ramen"]},
+      {"name": "time", "kind": "time", "duration_minutes": 90,
+       "window": {"start": "2099-01-01T17:00+09:00", "end": "2099-01-01T22:00+09:00"}},
+      {"name": "split_bill", "kind": "flag"}
+    ]
+  },
+  "delta": {
+    "offer": [
+      {"place": "Sushi", "split_bill": true,
+       "time": {"start": "2099-01-01T18:00+09:00", "end": "2099-01-01T19:30+09:00"}},
+      {"place": "Pasta", "split_bill": true,
+       "time": {"start": "2099-01-01T19:00+09:00", "end": "2099-01-01T20:30+09:00"}}
+    ]
+  },
+  "nonce": "<id>",
+  "created_at": "2099-01-01T09:00:00+09:00",
+  "payload_hash": "<64 hex>",
   "signature": "<base64>"
 }
 ```
 
-## 3. Message types
+## 4. Issues
 
-The schema defines ten values. Six are used on the wire today.
+Each issue has a `name` matching `^[a-z][a-z0-9_]{0,31}$`, unique in the
+request, and one of four kinds. The kind fixes the value shape and how two
+values compare. There is no other kind, so a receiver needs no code for a new
+kind of agreement: it is a new combination of issues.
 
-| Type | Sent by | When | `payload` | `delta` |
+| Kind | Declaration | Value | Valid when | Same when |
 | --- | --- | --- | --- | --- |
-| `REQUEST` | Initiator | Opens the session. Always `sequence` 1. | The request details (section 5). | `{}` |
-| `PROPOSE` | Initiator | Immediately after `REQUEST`, as `sequence` 2. | `{}` | The initiator's first offer. |
-| `COUNTER` | Either party | Answers an offer with a different offer. | `{"public_reason": ...}` | The new offer. |
-| `ACCEPT` | Either party | Agrees to the standing offer. Ends the session as agreed. | `{}` | The agreed value. |
-| `REJECT` | Either party | Declines. Ends the session as failed. | `{"public_reason": ...}` | `{"code": ...}` |
-| `ERROR` | Either party | Ends the session as failed when negotiation cannot continue. | `{}` | `{"code": ...}` |
+| `choice` | `options` (optional): 1 to 20 distinct strings | string, 1 to 100 characters | in `options`, if declared | the strings are equal |
+| `time` | `duration_minutes` 1 to 1440, `window` {start, end} | slot {start, end} | inside the window, length `duration_minutes` | start and end are the same instants |
+| `amount` | `unit` (1 to 16 characters), `scale` 0 to 6, `min`, `max`, `step` ≥ 1 | integer | `min ≤ v ≤ max` and `(v - min)` a multiple of `step` | the integers are equal |
+| `flag` | nothing | `true` or `false` | always | the booleans are equal |
 
-`REQUEST_APPROVAL`, `APPROVAL_RESULT`, `EXECUTE` and `RECEIPT` are defined in
-the schema. The current implementation does not send them, and a receiver
-rejects them with `INVALID_STATE_TRANSITION` (section 8). Human approval is a
-local step, not a wire message (section 6).
+Rules for the declaration:
 
-Offers are exchanged as deltas, not as full state. The offer shape depends on the
-intent (section 5).
+- `choice` without `options` is open: an offer MAY bring new values, for
+  example a new place.
+- `time`: slot and window times are at minute precision (`HH:MM` or
+  `HH:MM:00`) with an offset. The window start is before its end, the window is
+  at most 31 days, and `duration_minutes` fits in it.
+- `amount`: an integer in the smallest unit. The real value is
+  `v × 10^-scale` in `unit`. `min ≤ max`. All integers are within
+  ±(2^53 - 1). There is no floating point anywhere in 0.3.
+- The declaration is fixed for the session. Names, kinds, options, units and
+  limits never change.
 
-## 4. Session state
+A `REQUEST` with an invalid declaration opens no session.
 
-A receiver tracks, per session: the last `sequence`, the type of the last
-negotiation message, the number of `COUNTER` messages so far, the peer node, the
-parties, `intent`, `session_version`, and a status.
+## 5. Session state
 
-Allowed transitions, by the type of the previous message:
+A node records, per session: both parties (agent ID and node ID), `intent`,
+`session_version`, the deadline, the declaration, the **standing offer** (the
+last offer sent), the last sender, the last `sequence`, the number of
+`COUNTER` messages, and a status: `open`, `agreed`, `rejected`,
+`not_supported` or `expired`.
 
-| Previous | Next may be |
-| --- | --- |
-| (none) | `REQUEST` |
-| `REQUEST` | `PROPOSE`, `REJECT`, `ERROR` |
-| `PROPOSE` | `ACCEPT`, `COUNTER`, `REJECT`, `ERROR` |
-| `COUNTER` | `ACCEPT`, `COUNTER`, `REJECT`, `ERROR` |
+### 5.1 Opening
 
-Further rules:
+A `REQUEST` opens the session. The sender becomes the initiator, the receiver
+the responder. A `REQUEST` whose declaration is valid but whose offer is not
+opens no session either. A second `REQUEST` for a known `session_id` is
+dropped (`MESSAGE_REPLAYED`).
 
-- After `ACCEPT`, `REJECT` or `ERROR` the session is terminal. Any later message
-  is rejected.
-- `sequence` must equal the last recorded `sequence` plus 1. The first message is
-  `REQUEST` with `sequence` 1.
-- A `COUNTER` is rejected when the session already holds 3 `COUNTER` messages
-  (counted over both parties). At most 3 `COUNTER` messages are accepted.
-- While a receiver waits for its own human decision (section 6), it accepts only
-  `REJECT` or `ERROR` from the peer.
+### 5.2 Turns
 
-Separately from this cap, the reference implementation stops answering with
-`COUNTER` earlier. When the session already holds 2 or more `COUNTER` messages
-(including the one just received), its automatic reply is not a `COUNTER`.
-What it sends instead depends on the intent (section 5).
+- Every later message comes from one party of the session and goes to the
+  other. Else `SESSION_BINDING_MISMATCH`. `intent` and `session_version` equal
+  the recorded values. Else `SESSION_BINDING_MISMATCH`.
+- Senders strictly alternate: only the party that did not send the previous
+  message may send the next one. There is no withdrawal while the other side
+  is answering, because a withdrawal racing an `ACCEPT` would leave the two
+  sides with different results.
+- `sequence` is the last recorded value plus 1.
+- At most 3 `COUNTER` per session, counted over both parties. So a session has
+  at most 5 messages.
+- After `ACCEPT`, `REJECT` or `ERROR` the session is closed. Any later message
+  is dropped.
 
-## 5. Intents
+A message that breaks a turn rule is dropped with `INVALID_STATE_TRANSITION`.
+A message for an unknown session that is not a `REQUEST` is dropped the same
+way.
 
-An `intent` selects the negotiation domain. A node advertises the intents it can
-receive in its agent card (section 10).
+### 5.3 Deadline
 
-| Intent | Remote | Notes |
-| --- | --- | --- |
-| `meeting.schedule` | Yes | Find a common time slot. |
-| `cost.split` | Yes | Agree on one party's share of a cost. |
-| `task.request` | No | Local only. A node does not advertise it, and a `REQUEST` carrying it is rejected with `INTENT_NOT_SUPPORTED_FOR_REMOTE_REQUEST`. |
+- `REQUEST.payload.expires_at` fixes one deadline. It MUST be after the
+  `REQUEST`'s `created_at` and at most 7 days later. It cannot be extended.
+- A message is on time when its signed `created_at` is not after
+  `expires_at`. A message created later is dropped (`SESSION_EXPIRED`). The
+  300 second window of section 9 bounds clock differences, so an `ACCEPT`
+  created just before the deadline and received after it is still valid.
+- A session with no closing message ends locally as `expired` 300 seconds
+  after `expires_at`.
+- The sender of an `ACCEPT` MUST show its human "accepted, delivery not
+  confirmed" until the transport confirms delivery. It MAY resend the
+  identical bytes (section 9 step 7). If no confirmation arrives before the
+  session expires, the outcome is unknown, and the node MUST tell its human
+  so. The protocol does not hide this case.
 
-A `REQUEST` with an unregistered intent is rejected with `UNKNOWN_INTENT`.
+## 6. Packages, offers and agreement
 
-### 5.1 `meeting.schedule`
+- A **package** is an object with exactly one valid value (section 4) for
+  every declared issue, and no other key.
+- An **offer** is `delta.offer`: 1 to 5 packages, no two the same. Offering
+  whole packages keeps combinations intact: if a human approved "Sushi at
+  18:00" and "Pasta at 19:00", the peer cannot pick "Sushi at 19:00".
+- An `ACCEPT` carries one package in `delta.agreed`. It MUST be the same,
+  issue by issue, as one package of the standing offer, which is always the
+  receiver's own last offer. Times compare as instants, so the same slot
+  written with another offset is the same value.
+- Whether a package suits the accepting side is that side's local decision.
+  The wire check only proves the package was offered.
 
-`REQUEST` payload:
+A message that breaks a rule of this section, or of section 4, is dropped with
+`INVALID_NEGOTIATION_PAYLOAD`. The session stays as it was, still waiting for
+a valid message from the same party.
 
-```json
-{
-  "intent": "meeting.schedule",
-  "topic": "...",
-  "duration_minutes": 30,
-  "date_range": {"start": "2026-08-03", "end": "2026-08-03"},
-  "preferred_time_ranges": [{"start": "13:00", "end": "15:00"}],
-  "timezone": "Asia/Tokyo"
-}
-```
+Disclosure is bounded: at most 5 packages per offer and at most 4 offers per
+session, 20 packages in all. Limits, preferences and reasons are never sent
+(section 10).
 
-- `topic`: 1 to 500 characters. `duration_minutes`: integer from 1 to 480.
-- `date_range`: dates as `YYYY-MM-DD`.
-- `preferred_time_ranges`: at least one `{"start","end"}` in `HH:MM`, start before
-  end.
-- `timezone`: the initiator's timezone.
+## 7. Approval
 
-A **slot** is `{"start": ..., "end": ...}` with ISO 8601 date-times that carry a
-UTC offset, at minute precision, for example
-`{"start":"2099-01-01T00:00+09:00","end":"2099-01-01T00:30+09:00"}`. Two slots
-are the same when their start and end are the same instants, even if their
-offsets differ.
+Every package in an offer is binding once sent: the peer may accept it, and
+then the session is agreed.
 
-Deltas:
+- Before a node sends `REQUEST`, `COUNTER` or `ACCEPT`, every package in it
+  MUST be approved by its human, or covered by a delegation the human set up
+  whose scope includes that package.
+- `REJECT` with `HUMAN_REJECTED` or `APPROVAL_EXPIRED` reports the human's
+  decision, or the lack of one.
+- Not offering the same slot or item in two open sessions at once is a local
+  duty. It cannot be seen on the wire.
 
-- `PROPOSE` and `COUNTER`: `{"candidate_slots": [slot, ...]}`. The reference
-  sender offers at most 5 slots per message. It generates candidates in
-  30-minute steps, at most 20, from the date range and preferred time ranges,
-  and leaves out times it is busy.
-- `ACCEPT`: `{"selected_slot": slot}`.
+Approval is a local step, not a message. A receiver cannot check it, so the
+reference checker does not.
 
-Reply rule: the replier intersects the received candidates with its own. If a
-common slot exists and its local policy allows an automatic answer, it sends
-`ACCEPT` with the first common slot. If there is no common slot, it sends
-`COUNTER` with its own candidates and `public_reason` `no_common_slot`. If its
-policy requires a human decision, see section 6.
+## 8. Signing
 
-If the exchange reaches the automatic round limit without agreement, the replier
-sends `ERROR` with `delta` `{"code": "NO_AVAILABLE_SLOT"}`.
+The signature covers every field except `signature`.
 
-### 5.2 `cost.split`
+1. `payload_hash` is the lowercase hex SHA-256 of the UTF-8 bytes of the JCS
+   (RFC 8785) serialization of `{"payload": <payload>, "delta": <delta>}`.
+2. Build the envelope with `payload_hash` and without `signature`.
+3. Serialize it with JCS and sign the bytes with the sender node's Ed25519
+   private key.
+4. Set `signature` to the standard Base64, with padding, of the 64-byte
+   signature.
 
-`REQUEST` payload:
+A receiver verifies with the key it holds for `sender_node_id` (section 11).
+It never takes the key from the message.
 
-```json
-{
-  "intent": "cost.split",
-  "title": "...",
-  "total_amount": 10000.0,
-  "currency": "JPY",
-  "proposed_share": 3000.0,
-  "deadline": null
-}
-```
+An implementation MUST reproduce the vectors in
+[test-vectors/jcs-v0.2.json](test-vectors/jcs-v0.2.json) before it exchanges
+signed messages. The canonicalization did not change in 0.3.
 
-- `title`: 1 to 500 characters. `total_amount`: number greater than 0.
-- `currency`: 3 characters. The reference implementation uses `JPY` when none is
-  given.
-- `proposed_share`: number from 0 up to `total_amount`. This is the share
-  proposed for the responder.
-- `deadline`: `YYYY-MM-DD` or `null`.
+## 9. Receiver checks
 
-Deltas:
+Peer input is untrusted. A receiver runs these checks in order. A failed check
+drops the message, changes nothing and gets no reply.
 
-- `PROPOSE` and `COUNTER`: `{"proposed_share": number}`. A `COUNTER` amount is
-  rounded to 2 decimals.
-- `ACCEPT`: `{"agreed_share": number}`.
-- `REJECT`: `{"code": "COST_SHARE_EXCEEDS_LIMIT"}` when the offer is beyond what
-  the replier will ever accept.
-
-Reply rule: the replier either accepts the standing offer, counters with a
-different amount, asks its human (section 6), or rejects. An automatic
-`COUNTER` carries `public_reason` `constraint_violation`. When the replier would
-counter and the session already holds 2 `COUNTER` messages, it does not send
-`COUNTER` or `ERROR`. It asks its human instead (section 6).
-
-## 6. Message sequences
-
-Roles: the **initiator** starts the session. The **responder** receives it.
-After `PROPOSE`, the two parties alternate replies.
-
-Meeting with a common slot:
-
-```
-Initiator                          Responder
-  REQUEST   (seq 1)  ---------->   validate, record session, no reply
-  PROPOSE   (seq 2)  ---------->   intersect candidates
-                     <----------   ACCEPT (seq 3)   selected_slot
-```
-
-Meeting with no common slot (the shape the golden tests check):
-
-```
-  REQUEST (1), PROPOSE (2)  ---->
-                     <----------   COUNTER (3)  public_reason: no_common_slot
-  COUNTER (4)        ---------->
-                     <----------   ERROR (5)    code: NO_AVAILABLE_SLOT
-```
-
-`cost.split` follows the same shape with `proposed_share` offers. The exchange
-ends with `ACCEPT` (`agreed_share`), `REJECT`, or a human decision.
-
-The replier's local policy decides whether a reply is automatic. When the
-decision needs a human (for example, delegation is off, confidence is low,
-auto-accept is disabled, or the relationship requires approval):
-
-1. The replier sends nothing to the peer. The session waits for its human.
-   Meanwhile it accepts only `REJECT` or `ERROR` from the peer.
-2. The human approves, rejects, or lets the request expire.
-3. Approve: the replier sends `ACCEPT` or `COUNTER`. For `meeting.schedule`,
-   the approval lists a selected slot, if any, and candidate slots. With no
-   override, the reply is `ACCEPT` with `selected_slot` if a slot was selected,
-   and otherwise `COUNTER` with up to 5 of the listed candidates. The human may
-   instead pick one of the listed candidates: `ACCEPT` if it is the selected
-   slot, `COUNTER` with that single slot if not. A pick that is not listed is
-   refused locally. A `COUNTER` sent this way carries `public_reason`, derived
-   from the internal reason of the approval. For `cost.split`, the human may override the amount and the reply is
-   `ACCEPT` with `agreed_share`. After a `COUNTER`, the session stays open.
-4. Reject or expiry: the replier sends `REJECT` with `payload`
-   `{"public_reason": "policy_declined"}` and `delta` `{"code": "HUMAN_REJECTED"}`
-   or `{"code": "APPROVAL_EXPIRED"}`.
-
-The approval step can happen on either side, including the initiator when it
-receives a `COUNTER`.
-
-## 7. Signing
-
-The signature covers every envelope field except `signature`, including
-`payload_hash`.
-
-1. Compute `payload_hash` as the lowercase hex SHA-256 of the UTF-8 bytes of the
-   JCS (RFC 8785) serialization of `{"payload": <payload>, "delta": <delta>}`.
-2. Build the envelope with `payload_hash` set and without `signature`.
-3. Serialize the envelope with JCS (RFC 8785). Sign those bytes with the sender
-   node's Ed25519 private key.
-4. Set `signature` to the standard Base64 (with padding) of the signature.
-
-A receiver verifies with the public key it holds for `sender_node_id`. It never
-takes the key from the message.
-
-Notes:
-
-- JCS sorts keys, uses no insignificant whitespace, and serializes numbers as
-  ECMAScript does. For example `3000.0` is serialized as `3000`.
-- Reject values JCS cannot represent: `NaN`, infinities, and integers outside
-  the range -(2^53 - 1) to 2^53 - 1.
-- An implementation must reproduce the vectors in
-  [test-vectors/jcs-v0.2.json](test-vectors/jcs-v0.2.json) before exchanging
-  signed messages.
-
-## 8. Receiver checks
-
-For each incoming envelope, in this order, the reference implementation does the
-following. A failed check drops the message. It sends no reply to the sender.
-
-1. **Known peer.** The peer for `sender_node_id` must exist and be marked
-   trusted. Else `PEER_NOT_TRUSTED`.
-2. **Identity mapping.** The trusted peer's personal agent ID must equal
-   `sender_agent_id`. `receiver_node_id` must be this node. `receiver_agent_id`
-   must be a personal agent of this node. Else `AGENT_IDENTITY_MISMATCH`.
-3. **Schema.** The envelope must match the 0.2 schema, and `created_at` must
-   parse as a date-time with a timezone. Else `MESSAGE_SCHEMA_INVALID`.
-4. **Signature and hash.** The signature must verify, and `payload_hash` must
-   match. Else `MESSAGE_SIGNATURE_INVALID`.
-5. **Time window.** `created_at` must be within 300 seconds of the receiver's
+1. **Size.** At most 16384 bytes, checked before parsing. Else
+   `MESSAGE_TOO_LARGE`. A sender MUST check the same limit. The total limit
+   wins over the per-field limits.
+2. **Strict JSON.** One UTF-8 JSON object, nesting at most 8 levels, no
+   duplicate keys, no number with a fraction or exponent (so no `3000.0`), no
+   `NaN` or infinities. Else `MESSAGE_SCHEMA_INVALID`.
+3. **Schema.** The envelope matches the 0.3 schema. Else
+   `MESSAGE_SCHEMA_INVALID`.
+4. **Peer and address.** `sender_node_id` is a trusted peer (else
+   `PEER_NOT_TRUSTED`), whose registered personal agent is `sender_agent_id`
+   (else `AGENT_IDENTITY_MISMATCH`). `receiver_node_id` and
+   `receiver_agent_id` are this node and its agent (else
+   `SESSION_BINDING_MISMATCH`).
+5. **Signature.** `payload_hash` matches and the signature verifies. Else
+   `MESSAGE_SIGNATURE_INVALID`.
+6. **Time window.** `created_at` is within 300 seconds of the receiver's
    clock, in the past or the future. Else `MESSAGE_EXPIRED`.
-6. **Replay.** `message_id` is recorded for 3600 seconds. A second message with
-   the same `message_id` is dropped without processing (`MESSAGE_REPLAYED`).
-   Only `message_id` is tracked. `nonce` is covered by the signature but is not
-   checked separately.
-7. **State machine.** Section 4. Else `INVALID_STATE_TRANSITION`. This includes a
-   message for an unknown session that is not a `REQUEST`, and the four unused
-   message types.
-8. **For a `REQUEST`:** the `intent` must be registered and remote-capable
-   (`UNKNOWN_INTENT`, `INTENT_NOT_SUPPORTED_FOR_REMOTE_REQUEST`). The payload
-   must be valid for the intent (`INVALID_NEGOTIATION_PAYLOAD`). If the peer's
-   agent card lists capabilities, they must include this intent and
-   `aun/0.2` (`PEER_CAPABILITY_MISMATCH`). A peer whose card has no
-   capabilities is accepted.
-9. **For any other message (session binding).** The message must belong to the
-   session it names. `sender_node_id` must equal the node that sent the
-   `REQUEST`. `sender_agent_id` and `receiver_agent_id` must be the two parties
-   of the session and must differ. `intent` and `session_version` must equal the
-   values recorded at session start. Else `SESSION_BINDING_MISMATCH`. Without
-   this check, any trusted peer that knows a `session_id` and the next `sequence`
-   could inject an `ACCEPT` into someone else's session.
+7. **Duplicates and replay.** A message whose `message_id` is known and whose
+   bytes, as JCS, are identical to the recorded one is a **duplicate**: it is
+   ignored without error. A different message with a known `message_id`, or a
+   nonce this sender node already used, is dropped (`MESSAGE_REPLAYED`).
+8. **State and payload.** Sections 5 and 6: the session, the turn, the
+   deadline, the declaration and the packages. A message for a `sequence`
+   already recorded is dropped (`MESSAGE_REPLAYED`).
 
-The codes in this section are receiver-side outcomes. They are never carried in
-an envelope.
+A node keeps message IDs and nonces at least until 300 seconds after the
+session deadline. After that the time window stops replayed copies.
 
-## 9. Errors on the wire
+A sender runs steps 1 to 3 and 8 on its own message before sending it.
 
-`REJECT` and `ERROR` carry a code in `delta.code`. The codes the reference
-implementation sends:
+### Free text is data
 
-| Message | `delta.code` | Meaning |
-| --- | --- | --- |
-| `ERROR` | `NO_AVAILABLE_SLOT` | `meeting.schedule` ended without a common slot. |
-| `ERROR` | `NEGOTIATION_ROUNDS_EXHAUSTED` | Default for a domain that sets no code of its own, when the automatic round limit is reached. |
-| `REJECT` | `HUMAN_REJECTED` | The human declined. |
-| `REJECT` | `APPROVAL_EXPIRED` | The human did not decide in time. |
-| `REJECT` | `COST_SHARE_EXCEEDS_LIMIT` | `cost.split`: the offered share is beyond the replier's limit. |
+`topic`, option strings, `unit`, issue names and `intent` come from the peer.
+A node MUST NOT follow them as instructions. They MUST NOT change approval
+settings, reach secrets or start external actions. A node SHOULD show its
+human the peer's text apart from what it verified itself: who sent it, which
+package, and whether it was approved.
 
-A receiver treats `delta.code` as an opaque string. On `REJECT` or `ERROR` it
-ends the session as failed and stores the code, or the message type name if
-there is none, and `payload.public_reason` if present.
+## 10. Codes and disclosure
 
-### Minimal disclosure and public reasons
+`REJECT` codes in `delta.code`:
 
-A message must carry only what the peer needs to continue. Never put the
-following in `payload` or `delta`:
+| Code | Meaning |
+| --- | --- |
+| `NO_AGREEMENT` | No acceptable package and no counter left. |
+| `OUTSIDE_LIMIT` | The offers are beyond what this side will ever accept. The limit is not sent. |
+| `HUMAN_REJECTED` | The human declined. |
+| `APPROVAL_EXPIRED` | The human did not decide in time. |
 
-- Reservation values, limits and preference parameters. The reference tests scan
-  every `cost.split` message for the keys `reservation_ratio`, `preferred_ratio`,
-  `concession_ratio`, `max_auto_accept_amount` and `max_negotiable_amount`.
-- Calendar content: titles and bodies of busy entries, and why a time was
-  excluded. Only candidate slots are sent.
-- Internal decision reason codes.
+`ERROR` has one code, `NOT_SUPPORTED`.
 
-The reason for a `COUNTER` or `REJECT` is sent as one of three coarse categories
-in `payload.public_reason`:
+`payload.public_reason` in `COUNTER` and `REJECT` is one of three coarse
+categories:
 
 | Value | Used when |
 | --- | --- |
-| `no_common_slot` | The two candidate sets do not intersect. |
-| `constraint_violation` | The offer is outside what the replier will accept (preferences, limits, concession step). The constraint is not disclosed. |
-| `policy_declined` | The replier's delegation or approval policy, or its human, declined. Also the default. |
+| `no_common_option` | No package of the standing offer suits this side. |
+| `constraint_violation` | The offer breaks a constraint of this side. The constraint is not sent. |
+| `policy_declined` | The delegation, approval policy or human declined. |
 
-## 10. Agent card and capabilities
+A message carries only what the peer needs to continue. A node MUST NOT send
+limits, reservation values, preference weights, calendar content (titles of
+busy entries, why a time was excluded) or internal reason codes.
 
-Before two nodes can talk, each holds the other's **agent card**. The exchange
-of cards is not part of the message flow. The card gives a node what it needs to
-verify messages and choose intents.
+Receiver-side outcomes of section 9, which are never sent:
+`MESSAGE_TOO_LARGE`, `MESSAGE_SCHEMA_INVALID`, `PEER_NOT_TRUSTED`,
+`AGENT_IDENTITY_MISMATCH`, `MESSAGE_SIGNATURE_INVALID`, `MESSAGE_EXPIRED`,
+`MESSAGE_REPLAYED`, `SESSION_BINDING_MISMATCH`, `INVALID_STATE_TRANSITION`,
+`SESSION_EXPIRED`, `INVALID_NEGOTIATION_PAYLOAD`.
 
-Card version `enishi-card/2`:
+## 11. Trust, agent card and transport
+
+Two nodes trust each other out of band, for example by scanning a code in
+person. Each then holds the other's **agent card**:
 
 | Field | Meaning |
 | --- | --- |
-| `version` | `"enishi-card/2"`. Version `enishi-card/1` has no `capabilities`. |
-| `agent_id` | The node ID. Must equal `agt_` plus the first 16 hex of the SHA-256 of the public key. |
-| `personal_agent_id` | The personal agent represented. |
-| `public_key` | Base64 of the raw 32-byte Ed25519 public key. |
-| `fingerprint` | First 8 bytes of the SHA-256 of the public key, as colon-separated hex pairs. |
-| `profile.display_name` | Name shown to humans. Must not be blank. |
-| `capabilities` | See below. |
+| `version` | `"aun-card/1"` |
+| `node_id` | Must match `public_key` (section 2). |
+| `agent_id` | The personal agent represented. |
+| `public_key` | Base64 of the raw 32-byte Ed25519 key. |
+| `display_name` | Name shown to humans, not blank. Free text (section 9). |
+| `protocol_versions` | Includes `"aun/0.3"`. |
 | `relay_endpoint` | Where the node receives messages. |
 | `issued_at` | Issue time. |
-| `signature` | Base64 Ed25519 signature by the node key. |
+| `signature` | Base64 Ed25519 signature by the node key over the JCS of the card without `signature`. |
 
-`capabilities`:
+All four issue kinds are mandatory, so a card does not list them. Accepting
+the format is not accepting every agreement: a node MAY still answer
+`NOT_SUPPORTED`.
 
-```json
-{
-  "timezone": "<IANA timezone name>",
-  "supported_intents": ["meeting.schedule", "cost.split"],
-  "protocol_versions": ["aun/0.2", "aun/0.1"]
-}
-```
+Transport (informative): messages travel through a relay that stores and
+forwards them by `receiver_node_id`. The relay should accept a message only
+from the authenticated `sender_node_id`, and limit size and rate. It does not
+verify signatures. Delivery confirmation (section 5.3) comes from the
+transport, not from an AUN message.
 
-`supported_intents` lists only intents the node can receive remotely.
-`task.request` is not listed. A node must not send a `REQUEST` for an intent the
-peer's card does not list, or to a peer whose card does not list `aun/0.2`
-(`PEER_CAPABILITY_MISMATCH`). If the peer has no capabilities (an
-`enishi-card/1` card), the reference sender sends only `meeting.schedule`.
+Probing a peer's limits with repeated sessions is a local policy matter. This
+specification does not claim to prevent it.
 
-The card signature is computed over the card without `signature`, serialized as
-UTF-8 JSON with sorted keys, no whitespace, and non-ASCII characters left
-unescaped. This is not JCS.
+## 12. Profiles
 
-## 11. Transport
+A profile is a conventional `intent` with a fixed issue list. It needs no
+receiver code.
 
-This section is informative.
+- `meeting.schedule`: one `time` issue named `slot`. 0.2's `date_range`,
+  `preferred_time_ranges` and `timezone` are not sent; the window and the
+  offsets carry the same information.
+- `cost.split`: one `amount` issue named `share`, with `min` 0 and `max` the
+  total. The `topic` names the total for the humans.
 
-- Messages travel through a relay that stores and forwards them. A message is
-  addressed to the receiver's node ID.
-- The relay accepts a message only when `sender_node_id` is the authenticated
-  node. (For legacy `aun/0.1` envelopes without node IDs, it compares
-  `sender_agent_id`.)
-- The relay limits message size and request rate.
+Other agreements, such as a dinner plan, a favour or a shared gift, are just
+other issue lists. The examples show three.
 
-The relay does not verify the envelope signature. A receiver must run the
-checks in section 8.
+## 13. Versioning
 
-## 12. Versioning
+- This document specifies `aun/0.3`. Every conforming message has
+  `"protocol": "aun/0.3"`. The card lists `aun/0.3`.
+- 0.2 and 0.1 messages are not valid 0.3 messages. There is no automatic
+  fallback to an older version.
 
-- This document specifies `aun/0.2`. The `protocol` field of every message that
-  conforms to this document is `"aun/0.2"`.
-- `aun/0.1` is deprecated. It has no required node IDs and signs a Python-style
-  canonical JSON (sorted keys, compact separators, non-ASCII unescaped) instead
-  of JCS. Local Core can still verify existing 0.1 envelopes during migration.
-  New third-party implementations must not use it.
-- Removal of 0.1 verification is planned for the next breaking protocol release.
-- A node lists the versions it supports in `capabilities.protocol_versions`.
-
-## 13. Examples and conformance
+## 14. Examples and conformance
 
 This section is informative.
 
-- [examples/](examples/) holds signed example sessions for `meeting.schedule`
-  (with and without a common slot) and `cost.split` (counter and accept, and a
-  human rejection). The keys in [examples/keys.json](examples/keys.json) are
-  derived from public strings. They are for tests only and must never be used
-  for real messages.
-- [tools/aun_reference.py](tools/aun_reference.py) is a small reference for
-  sections 1 and 7: node ID derivation, signing, and verification of schema,
-  signature, payload hash and time window.
-- [tools/make_examples.py](tools/make_examples.py) regenerates the examples
-  byte for byte.
-- `pytest -q` runs [tests/test_conformance.py](tests/test_conformance.py). It
-  reproduces the JCS vectors, verifies every example and checks that each
-  session follows the transitions of section 4.
+- [examples/](examples/) has seven signed sessions: `meeting-schedule`
+  (agreed in 2 messages), `meeting-schedule-no-agreement` (three counters,
+  then `REJECT`), `cost-split`, `cost-split-rejected`, `dinner-plan` (three
+  issues), `favor-ask` and `gift-pick` (an open choice). The keys in
+  [examples/keys.json](examples/keys.json) come from public strings. They are
+  for tests only and MUST NOT be used for real messages.
+- [tools/make_examples.py](tools/make_examples.py) builds every example by
+  sending it through two reference nodes, so every example follows sections 5
+  and 6. It regenerates the files byte for byte.
+- `python tools/aun_reference.py check-session <dir> --keys examples/keys.json`
+  replays one session through the receiver checks.
+- `pytest -q` runs [tests/test_conformance.py](tests/test_conformance.py): the
+  JCS vectors, every example, and the dropped cases of sections 4 to 9.
 
-The examples do not cover the state-based checks of section 8, such as replay
-detection and peer trust.
+Not covered by tests: approval (section 7), free text handling (section 9),
+double booking across sessions (section 7) and the unknown outcome of an
+unconfirmed `ACCEPT` (section 5.3). These are local duties a receiver cannot
+observe.

@@ -1,0 +1,36 @@
+{
+  "protocol": "aun/0.3",
+  "message_id": "848bcb01fa3ad43a03ca4dcfaa816dee",
+  "session_id": "session-meeting-schedule-no-agreement",
+  "sender_agent_id": "agent-b",
+  "receiver_agent_id": "agent-a",
+  "sender_node_id": "agt_ca07afd7b2241f78",
+  "receiver_node_id": "agt_291e1df27cc1f0f9",
+  "message_type": "COUNTER",
+  "intent": "meeting.schedule",
+  "session_version": 1,
+  "sequence": 4,
+  "payload": {
+    "public_reason": "no_common_option"
+  },
+  "delta": {
+    "offer": [
+      {
+        "slot": {
+          "start": "2099-01-01T17:00+09:00",
+          "end": "2099-01-01T17:30+09:00"
+        }
+      },
+      {
+        "slot": {
+          "start": "2099-01-01T17:30+09:00",
+          "end": "2099-01-01T18:00+09:00"
+        }
+      }
+    ]
+  },
+  "nonce": "c2f5cc51d7eeee5501c45afdc89b83ab",
+  "created_at": "2099-01-01T09:00:30+09:00",
+  "payload_hash": "e1dde5a597f43281db3991922fb4ff3315d65e033e1792de26360b9d292cea49",
+  "signature": "42ib1ElAJIrb67kUrzLNBUOqPbS0cBbrwRWVsZz8kL1chE148QajxHdYEhEYlUazgwXZ/zaAX0sr4M1Wv7qSBw=="
+}

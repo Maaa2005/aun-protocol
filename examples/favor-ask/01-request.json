@@ -1,0 +1,47 @@
+{
+  "protocol": "aun/0.3",
+  "message_id": "dbe97b43626e82bd6936689ba2770360",
+  "session_id": "session-favor-ask",
+  "sender_agent_id": "agent-a",
+  "receiver_agent_id": "agent-b",
+  "sender_node_id": "agt_291e1df27cc1f0f9",
+  "receiver_node_id": "agt_ca07afd7b2241f78",
+  "message_type": "REQUEST",
+  "intent": "favor.ask",
+  "session_version": 1,
+  "sequence": 1,
+  "payload": {
+    "topic": "Water my plants this weekend",
+    "expires_at": "2099-01-02T09:00:00+09:00",
+    "issues": [
+      {
+        "name": "day",
+        "kind": "choice",
+        "options": [
+          "Saturday",
+          "Sunday"
+        ]
+      },
+      {
+        "name": "water_plants",
+        "kind": "flag"
+      }
+    ]
+  },
+  "delta": {
+    "offer": [
+      {
+        "day": "Saturday",
+        "water_plants": true
+      },
+      {
+        "day": "Sunday",
+        "water_plants": true
+      }
+    ]
+  },
+  "nonce": "d3ab5cdc00495036211673a7216d65eb",
+  "created_at": "2099-01-01T09:00:00+09:00",
+  "payload_hash": "0809a83f5520e2b65323376b8d06a8155b5d2031a77776b220b8cee4d14b9247",
+  "signature": "fdSaAUcKAPyM5oI9GH89wSbe8zMW7j4m0f9nPn8SVUfa2p6HNXPnmPI9kCdazdNrRVP7/UC8nJMyD7/sXpTxDg=="
+}

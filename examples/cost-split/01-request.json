@@ -1,5 +1,5 @@
 {
-  "protocol": "aun/0.2",
+  "protocol": "aun/0.3",
   "message_id": "4be199e48e478e6b23d708a32b0a9b92",
   "session_id": "session-cost-split",
   "sender_agent_id": "agent-a",
@@ -11,17 +11,29 @@
   "session_version": 1,
   "sequence": 1,
   "payload": {
-    "intent": "cost.split",
-    "title": "Team dinner",
-    "total_amount": 10000.0,
-    "currency": "JPY",
-    "proposed_share": 3000.0,
-    "deadline": null
+    "topic": "Team dinner, total 10000 JPY",
+    "expires_at": "2099-01-02T09:00:00+09:00",
+    "issues": [
+      {
+        "name": "share",
+        "kind": "amount",
+        "unit": "JPY",
+        "scale": 0,
+        "min": 0,
+        "max": 10000,
+        "step": 100
+      }
+    ]
   },
-  "delta": {},
-  "requires_human_approval": false,
+  "delta": {
+    "offer": [
+      {
+        "share": 3000
+      }
+    ]
+  },
   "nonce": "17dd278214a05831b38dd59d2569eeae",
   "created_at": "2099-01-01T09:00:00+09:00",
-  "payload_hash": "731f5c63de4aa017dad7deaec04beaaed9ac9b118409fe105967e82b4e529131",
-  "signature": "b1ef9q7W0eP7GZrPxuzC56D+lA2XXfH4GGfBy8hI07c8akzyCiCBcbWdaaZ2TMBuOJVgJg4Ln8mqzpG29hqaCw=="
+  "payload_hash": "29645e50b6459d89efd26a2507891cf37110dd6e87cddcb54e78c11e5010eae6",
+  "signature": "0SqvLqJE/6cxK2huz09YDGwimvNKzh+7i0ZFsqNHBuNpeAiR0lxV4HaIHVeywcnpakP/45pEJIi1gbGnLSt1Cw=="
 }

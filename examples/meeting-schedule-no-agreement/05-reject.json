@@ -1,0 +1,23 @@
+{
+  "protocol": "aun/0.3",
+  "message_id": "6b9d36e8d3fd4b0b37b576bba9995107",
+  "session_id": "session-meeting-schedule-no-agreement",
+  "sender_agent_id": "agent-a",
+  "receiver_agent_id": "agent-b",
+  "sender_node_id": "agt_291e1df27cc1f0f9",
+  "receiver_node_id": "agt_ca07afd7b2241f78",
+  "message_type": "REJECT",
+  "intent": "meeting.schedule",
+  "session_version": 1,
+  "sequence": 5,
+  "payload": {
+    "public_reason": "no_common_option"
+  },
+  "delta": {
+    "code": "NO_AGREEMENT"
+  },
+  "nonce": "e01889cdb763cc0ebbb6bab7c355560f",
+  "created_at": "2099-01-01T09:00:40+09:00",
+  "payload_hash": "fcc7784be87880bba7606a275a1a7d62cc35f3fb65aefcff718736c7129f27f3",
+  "signature": "SWzT+3Z7xuAQ/bC4YkswvMrMC8vz6kI64Sh4p727xVtOumE+RAXH+m0YeYGVWbnmWjG86ZSBl+5sg+X5onmODw=="
+}
