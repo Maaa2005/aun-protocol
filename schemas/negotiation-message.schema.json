@@ -1,97 +1,31 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://enishi.local/schemas/negotiation-message.schema.json",
-  "title": "AUN Protocol 0.2 Negotiation Message",
-  "description": "enishi.md §25 のエージェント間共通メッセージ形式",
+  "$id": "https://github.com/Maaa2005/aun-protocol/blob/main/schemas/negotiation-message.schema.json",
+  "title": "AUN Protocol 0.3 message",
+  "description": "Signed envelope of AUN Protocol 0.3. Shapes only: the rules that relate a package to its declaration or to the standing offer are in SPEC.md section 6.",
   "type": "object",
   "properties": {
-    "protocol": {
-      "type": "string",
-      "const": "aun/0.2"
-    },
-    "message_id": {
-      "type": "string",
-      "minLength": 1
-    },
-    "session_id": {
-      "type": "string",
-      "minLength": 1
-    },
-    "sender_agent_id": {
-      "type": "string",
-      "minLength": 1
-    },
-    "receiver_agent_id": {
-      "type": "string",
-      "minLength": 1
-    },
-    "sender_node_id": {
-      "type": "string",
-      "minLength": 1
-    },
-    "receiver_node_id": {
-      "type": "string",
-      "minLength": 1
-    },
-    "message_type": {
-      "type": "string",
-      "enum": [
-        "REQUEST",
-        "PROPOSE",
-        "COUNTER",
-        "ACCEPT",
-        "REJECT",
-        "REQUEST_APPROVAL",
-        "APPROVAL_RESULT",
-        "EXECUTE",
-        "RECEIPT",
-        "ERROR"
-      ]
-    },
+    "protocol": {"const": "aun/0.3"},
+    "message_id": {"$ref": "#/$defs/id"},
+    "session_id": {"$ref": "#/$defs/id"},
+    "sender_agent_id": {"$ref": "#/$defs/id"},
+    "receiver_agent_id": {"$ref": "#/$defs/id"},
+    "sender_node_id": {"$ref": "#/$defs/node_id"},
+    "receiver_node_id": {"$ref": "#/$defs/node_id"},
+    "message_type": {"enum": ["REQUEST", "COUNTER", "ACCEPT", "REJECT", "ERROR"]},
     "intent": {
       "type": "string",
-      "minLength": 1
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$"
     },
-    "session_version": {
-      "type": "integer",
-      "minimum": 1
-    },
-    "payload": {
-      "type": "object",
-      "properties": {
-        "public_reason": {
-          "type": "string",
-          "enum": ["no_common_slot", "constraint_violation", "policy_declined"]
-        }
-      },
-      "additionalProperties": true
-    },
-    "delta": {
-      "type": "object"
-    },
-    "requires_human_approval": {
-      "type": "boolean"
-    },
-    "sequence": {
-      "type": "integer",
-      "minimum": 1
-    },
-    "nonce": {
-      "type": "string",
-      "minLength": 1
-    },
-    "payload_hash": {
-      "type": "string",
-      "pattern": "^[0-9a-f]{64}$"
-    },
-    "signature": {
-      "type": "string",
-      "minLength": 1
-    },
-    "created_at": {
-      "type": "string",
-      "format": "date-time"
-    }
+    "session_version": {"type": "integer", "minimum": 1, "maximum": 1000},
+    "sequence": {"type": "integer", "minimum": 1, "maximum": 5},
+    "payload": {"type": "object"},
+    "delta": {"type": "object"},
+    "nonce": {"$ref": "#/$defs/id"},
+    "created_at": {"$ref": "#/$defs/date_time"},
+    "payload_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "signature": {"type": "string", "pattern": "^[A-Za-z0-9+/]{85}[AQgw]==$"}
   },
   "required": [
     "protocol",
@@ -107,11 +41,202 @@
     "sequence",
     "payload",
     "delta",
-    "requires_human_approval",
     "nonce",
     "created_at",
     "payload_hash",
     "signature"
   ],
-  "additionalProperties": false
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {"properties": {"message_type": {"const": "REQUEST"}}},
+      "then": {
+        "properties": {
+          "sequence": {"const": 1},
+          "payload": {"$ref": "#/$defs/request_payload"},
+          "delta": {"$ref": "#/$defs/offer_delta"}
+        }
+      },
+      "else": {"properties": {"sequence": {"minimum": 2}}}
+    },
+    {
+      "if": {"properties": {"message_type": {"const": "COUNTER"}}},
+      "then": {
+        "properties": {
+          "payload": {"$ref": "#/$defs/reason_payload"},
+          "delta": {"$ref": "#/$defs/offer_delta"}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"message_type": {"const": "ACCEPT"}}},
+      "then": {
+        "properties": {
+          "payload": {"$ref": "#/$defs/empty"},
+          "delta": {
+            "type": "object",
+            "properties": {"agreed": {"$ref": "#/$defs/package"}},
+            "required": ["agreed"],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"message_type": {"const": "REJECT"}}},
+      "then": {
+        "properties": {
+          "payload": {"$ref": "#/$defs/reason_payload"},
+          "delta": {
+            "type": "object",
+            "properties": {
+              "code": {"enum": ["NO_AGREEMENT", "OUTSIDE_LIMIT", "HUMAN_REJECTED", "APPROVAL_EXPIRED"]}
+            },
+            "required": ["code"],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"message_type": {"const": "ERROR"}}},
+      "then": {
+        "properties": {
+          "payload": {"$ref": "#/$defs/empty"},
+          "delta": {
+            "type": "object",
+            "properties": {"code": {"const": "NOT_SUPPORTED"}},
+            "required": ["code"],
+            "additionalProperties": false
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "node_id": {"type": "string", "pattern": "^agt_[0-9a-f]{16}$"},
+    "date_time": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}(:[0-9]{2}(\\.[0-9]{1,6})?)?(Z|[+-][0-9]{2}:[0-9]{2})$"
+    },
+    "minute_time": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}(:00)?(Z|[+-][0-9]{2}:[0-9]{2})$"
+    },
+    "name": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,31}$"},
+    "text": {"type": "string", "minLength": 1, "maxLength": 100},
+    "int": {"type": "integer", "minimum": -9007199254740991, "maximum": 9007199254740991},
+    "empty": {"type": "object", "maxProperties": 0},
+    "slot": {
+      "type": "object",
+      "properties": {
+        "start": {"$ref": "#/$defs/minute_time"},
+        "end": {"$ref": "#/$defs/minute_time"}
+      },
+      "required": ["start", "end"],
+      "additionalProperties": false
+    },
+    "value": {
+      "oneOf": [
+        {"$ref": "#/$defs/text"},
+        {"$ref": "#/$defs/slot"},
+        {"$ref": "#/$defs/int"},
+        {"type": "boolean"}
+      ]
+    },
+    "package": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 8,
+      "propertyNames": {"$ref": "#/$defs/name"},
+      "additionalProperties": {"$ref": "#/$defs/value"}
+    },
+    "offer_delta": {
+      "type": "object",
+      "properties": {
+        "offer": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 5,
+          "items": {"$ref": "#/$defs/package"}
+        }
+      },
+      "required": ["offer"],
+      "additionalProperties": false
+    },
+    "reason_payload": {
+      "type": "object",
+      "properties": {
+        "public_reason": {"enum": ["no_common_option", "constraint_violation", "policy_declined"]}
+      },
+      "required": ["public_reason"],
+      "additionalProperties": false
+    },
+    "request_payload": {
+      "type": "object",
+      "properties": {
+        "topic": {"type": "string", "minLength": 1, "maxLength": 200},
+        "expires_at": {"$ref": "#/$defs/date_time"},
+        "issues": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {"$ref": "#/$defs/issue"}
+        }
+      },
+      "required": ["topic", "expires_at", "issues"],
+      "additionalProperties": false
+    },
+    "issue": {
+      "type": "object",
+      "required": ["name", "kind"],
+      "oneOf": [
+        {
+          "properties": {
+            "name": {"$ref": "#/$defs/name"},
+            "kind": {"const": "choice"},
+            "options": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 20,
+              "uniqueItems": true,
+              "items": {"$ref": "#/$defs/text"}
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "name": {"$ref": "#/$defs/name"},
+            "kind": {"const": "time"},
+            "duration_minutes": {"type": "integer", "minimum": 1, "maximum": 1440},
+            "window": {"$ref": "#/$defs/slot"}
+          },
+          "required": ["duration_minutes", "window"],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "name": {"$ref": "#/$defs/name"},
+            "kind": {"const": "amount"},
+            "unit": {"type": "string", "minLength": 1, "maxLength": 16},
+            "scale": {"type": "integer", "minimum": 0, "maximum": 6},
+            "min": {"$ref": "#/$defs/int"},
+            "max": {"$ref": "#/$defs/int"},
+            "step": {"type": "integer", "minimum": 1, "maximum": 9007199254740991}
+          },
+          "required": ["unit", "scale", "min", "max", "step"],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "name": {"$ref": "#/$defs/name"},
+            "kind": {"const": "flag"}
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
 }

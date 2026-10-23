@@ -1,27 +1,45 @@
 # AUN Protocol
 
-AUN is a signed message protocol for personal AI agents that negotiate on
-behalf of their owners, such as scheduling a meeting or splitting a cost. Each
-agent discloses only what the other side needs, and a human makes the final
-decision when the agent should not decide alone.
+AUN is a signed message protocol for personal AI agents that agree on terms on
+behalf of their owners: a time, a place, an amount, a yes or no, or any mix of
+them. The name comes from *a-un no kokyu*, two people who agree without many
+words. When the first offer suits the other side, agreement takes 2 messages.
+Each agent discloses only the options its human approved, and the human keeps
+the final say.
 
-- Specification: [SPEC.md](SPEC.md) (version `aun/0.2`)
-- JSON Schema: [schemas/negotiation-message.schema.json](schemas/negotiation-message.schema.json)
+- Specification: [SPEC.md](SPEC.md) (version `aun/0.3`)
+- JSON Schemas: [messages](schemas/negotiation-message.schema.json) and
+  [agent cards](schemas/agent-card.schema.json)
+- Reference checker: [tools/aun_reference.py](tools/aun_reference.py)
 - Canonicalization (RFC 8785) test vectors: [test-vectors/jcs-v0.2.json](test-vectors/jcs-v0.2.json)
+- Receiver test vectors for any language: [test-vectors/receiver-v0.3.json](test-vectors/receiver-v0.3.json) (format in SPEC section 14)
+- Agent card test vectors: [test-vectors/card-v1.json](test-vectors/card-v1.json) (format in SPEC section 14)
+- Design note for 0.3: [docs/design-0.3.md](docs/design-0.3.md)
 
-The reference implementation is ENISHI Local Core. ENISHI product code is not
-part of this repository and is not covered by its license.
+A request declares the terms as a list of issues of four kinds (`choice`,
+`time`, `amount`, `flag`). A new kind of agreement is a new list of issues, not
+new code. The examples include meetings, cost shares, a dinner plan, a favour
+and a shared gift, all checked by the same code.
+
+The 0.2 specification is frozen at tag
+[`v0.2.0`](https://github.com/Maaa2005/aun-protocol/tree/v0.2.0).
 
 ## Quick start
 
 ```sh
 pip install -r requirements.txt && pytest -q
-python tools/aun_reference.py verify examples/meeting-schedule/03-accept.json \
+python tools/aun_reference.py verify examples/meeting-schedule/02-accept.json \
   --public-key ny9olPZA86PrrqKq4Zfafzj4/p1/+6DGKmrCIPKzFg0= --no-time-check
+python tools/aun_reference.py check-session examples/dinner-plan \
+  --keys examples/keys.json
+python tools/aun_reference.py verify-card examples/cards/a.json
 ```
 
-Set `ENISHI_LOCAL_CORE` to `services/local-core` to also cross-check the
-examples against the reference implementation.
+Two agents trust each other by exchanging signed agent cards in person, for
+example as a QR code. A later card from the same key can update the name and
+the relay address but never the key (SPEC section 11).
+
+The keys in `examples/keys.json` are for tests only.
 
 ## License
 

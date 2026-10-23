@@ -20,7 +20,13 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from aun_reference import node_id_from_public_key, sign_envelope  # noqa: E402
+from aun_reference import (  # noqa: E402
+    PROTOCOL,
+    Node,
+    Peer,
+    make_card,
+    node_id_from_public_key,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 JST = timezone(timedelta(hours=9))
@@ -60,10 +66,10 @@ def keys_document() -> dict[str, Any]:
     }
 
 
-def slot(hour: int, minute: int) -> dict[str, str]:
-    """A 30 minute slot on 2099-01-01 (+09:00)."""
+def slot(hour: int, minute: int, length: int = 30) -> dict[str, str]:
+    """A slot on 2099-01-01 (+09:00)."""
     start = datetime(2099, 1, 1, hour, minute, tzinfo=JST)
-    end = start + timedelta(minutes=30)
+    end = start + timedelta(minutes=length)
     fmt = "%Y-%m-%dT%H:%M+09:00"
     return {"start": start.strftime(fmt), "end": end.strftime(fmt)}
 
@@ -72,19 +78,31 @@ def _hex(label: str, length: int) -> str:
     return hashlib.sha256(label.encode()).hexdigest()[:length]
 
 
+EXPIRES_AT = (BASE_TIME + timedelta(days=1)).isoformat()
+
+
 def build_session(
     name: str, intent: str, steps: list[tuple[str, str, dict, dict]]
 ) -> dict[str, bytes]:
     """Build signed envelopes. `steps` is (sender 'a'|'b', type, payload, delta).
 
-    Returns {relative path: file bytes}.
+    Every message is recorded by its sender and checked by the receiver
+    exactly as SPEC section 9 says, so an example that breaks a rule fails
+    here. Returns {relative path: file bytes}.
     """
     files: dict[str, bytes] = {}
+    nodes = {who: Node(n["personal_agent_id"], n["private"]) for who, n in NODES.items()}
+    for who, n in NODES.items():
+        for other, peer in NODES.items():
+            if other != who:
+                nodes[who].trust(Peer(peer["personal_agent_id"], peer["public_key"]))
     for seq, (who, message_type, payload, delta) in enumerate(steps, start=1):
         sender = NODES[who]
-        receiver = NODES["b" if who == "a" else "a"]
+        to = "b" if who == "a" else "a"
+        receiver = NODES[to]
+        created_at = BASE_TIME + timedelta(seconds=10 * (seq - 1))
         unsigned = {
-            "protocol": "aun/0.2",
+            "protocol": PROTOCOL,
             "message_id": _hex(f"msg-{name}-{seq}", 32),
             "session_id": f"session-{name}",
             "sender_agent_id": sender["personal_agent_id"],
@@ -97,13 +115,14 @@ def build_session(
             "sequence": seq,
             "payload": payload,
             "delta": delta,
-            "requires_human_approval": False,
             "nonce": _hex(f"nonce-{name}-{seq}", 32),
-            "created_at": (BASE_TIME + timedelta(seconds=10 * (seq - 1))).isoformat(),
+            "created_at": created_at.isoformat(),
         }
-        envelope = sign_envelope(unsigned, sender["private"])
+        data = nodes[who].send(unsigned, created_at)
+        if nodes[to].receive(data, created_at) != "accepted":
+            raise AssertionError(f"{name} message {seq} was not accepted")
         filename = f"{seq:02d}-{message_type.lower()}.json"
-        files[f"examples/{name}/{filename}"] = _dump(envelope)
+        files[f"examples/{name}/{filename}"] = data
     return files
 
 
@@ -111,65 +130,121 @@ def _dump(obj: Any) -> bytes:
     return (json.dumps(obj, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
 
 
-def meeting_request() -> dict[str, Any]:
-    return {
-        "intent": "meeting.schedule",
-        "topic": "Project sync",
-        "duration_minutes": 30,
-        "date_range": {"start": "2099-01-01", "end": "2099-01-01"},
-        "preferred_time_ranges": [{"start": "13:00", "end": "15:00"}],
-        "timezone": "Asia/Tokyo",
-    }
+def request(topic: str, issues: list[dict[str, Any]]) -> dict[str, Any]:
+    return {"topic": topic, "expires_at": EXPIRES_AT, "issues": issues}
 
 
-def cost_request() -> dict[str, Any]:
-    return {
-        "intent": "cost.split",
-        "title": "Team dinner",
-        "total_amount": 10000.0,
-        "currency": "JPY",
-        "proposed_share": 3000.0,
-        "deadline": None,
-    }
+def offer(*packages: dict[str, Any]) -> dict[str, Any]:
+    return {"offer": list(packages)}
+
+
+def reason(public_reason: str) -> dict[str, str]:
+    return {"public_reason": public_reason}
+
+
+# Profiles (SPEC section 12): the old domains are issue declarations.
+def meeting_issue(window_start: tuple[int, int], window_end: tuple[int, int]) -> dict[str, Any]:
+    start = slot(*window_start, length=0)["start"]
+    end = slot(*window_end, length=0)["start"]
+    return {"name": "slot", "kind": "time", "duration_minutes": 30,
+            "window": {"start": start, "end": end}}
+
+
+SHARE = {"name": "share", "kind": "amount", "unit": "JPY", "scale": 0,
+         "min": 0, "max": 10000, "step": 100}
 
 
 def build_all() -> dict[str, bytes]:
     """Return every generated file as {relative path: bytes}."""
     files: dict[str, bytes] = {"examples/keys.json": _dump(keys_document())}
 
-    # Section 6: meeting with a common slot.
+    # Fast path: the first offer already contains an acceptable slot.
     files.update(build_session("meeting-schedule", "meeting.schedule", [
-        ("a", "REQUEST", meeting_request(), {}),
-        ("a", "PROPOSE", {}, {"candidate_slots": [slot(13, 0), slot(13, 30), slot(14, 0)]}),
-        ("b", "ACCEPT", {}, {"selected_slot": slot(13, 30)}),
+        ("a", "REQUEST", request("Project sync", [meeting_issue((13, 0), (15, 0))]),
+         offer({"slot": slot(13, 0)}, {"slot": slot(13, 30)}, {"slot": slot(14, 0)})),
+        ("b", "ACCEPT", {}, {"agreed": {"slot": slot(13, 30)}}),
     ]))
 
-    # Section 6: meeting with no common slot, ending in ERROR.
-    files.update(build_session("meeting-schedule-no-slot", "meeting.schedule", [
-        ("a", "REQUEST", meeting_request(), {}),
-        ("a", "PROPOSE", {}, {"candidate_slots": [slot(13, 0), slot(13, 30)]}),
-        ("b", "COUNTER", {"public_reason": "no_common_slot"},
-         {"candidate_slots": [slot(14, 0), slot(14, 30)]}),
-        ("a", "COUNTER", {"public_reason": "no_common_slot"},
-         {"candidate_slots": [slot(13, 0), slot(13, 30)]}),
-        ("b", "ERROR", {}, {"code": "NO_AVAILABLE_SLOT"}),
+    # Longest session: three counters, then the round limit ends it.
+    files.update(build_session("meeting-schedule-no-agreement", "meeting.schedule", [
+        ("a", "REQUEST", request("Project sync", [meeting_issue((9, 0), (18, 0))]),
+         offer({"slot": slot(9, 0)}, {"slot": slot(9, 30)})),
+        ("b", "COUNTER", reason("no_common_option"),
+         offer({"slot": slot(16, 0)}, {"slot": slot(16, 30)})),
+        ("a", "COUNTER", reason("no_common_option"),
+         offer({"slot": slot(10, 0)}, {"slot": slot(10, 30)})),
+        ("b", "COUNTER", reason("no_common_option"),
+         offer({"slot": slot(17, 0)}, {"slot": slot(17, 30)})),
+        ("a", "REJECT", reason("no_common_option"), {"code": "NO_AGREEMENT"}),
     ]))
 
-    # cost.split: counter, then accept the counter.
+    # Integer amounts in the smallest unit: a counter, then accept it.
     files.update(build_session("cost-split", "cost.split", [
-        ("a", "REQUEST", cost_request(), {}),
-        ("a", "PROPOSE", {}, {"proposed_share": 3000.0}),
-        ("b", "COUNTER", {"public_reason": "constraint_violation"},
-         {"proposed_share": 2500.5}),
-        ("a", "ACCEPT", {}, {"agreed_share": 2500.5}),
+        ("a", "REQUEST", request("Team dinner, total 10000 JPY", [SHARE]),
+         offer({"share": 3000})),
+        ("b", "COUNTER", reason("constraint_violation"), offer({"share": 2500})),
+        ("a", "ACCEPT", {}, {"agreed": {"share": 2500}}),
     ]))
 
-    # cost.split: the responder's human rejects.
+    # The responder's human declines.
     files.update(build_session("cost-split-rejected", "cost.split", [
-        ("a", "REQUEST", cost_request(), {}),
-        ("a", "PROPOSE", {}, {"proposed_share": 3000.0}),
-        ("b", "REJECT", {"public_reason": "policy_declined"}, {"code": "HUMAN_REJECTED"}),
+        ("a", "REQUEST", request("Team dinner, total 10000 JPY", [SHARE]),
+         offer({"share": 3000})),
+        ("b", "REJECT", reason("policy_declined"), {"code": "HUMAN_REJECTED"}),
     ]))
+
+    # Several issues: each package keeps a place, a time and a flag together.
+    dinner = [
+        {"name": "place", "kind": "choice", "options": ["Sushi", "Pasta", "Ramen"]},
+        {"name": "time", "kind": "time", "duration_minutes": 90,
+         "window": {"start": slot(17, 0, 0)["start"], "end": slot(22, 0, 0)["start"]}},
+        {"name": "split_bill", "kind": "flag"},
+    ]
+    files.update(build_session("dinner-plan", "dinner.plan", [
+        ("a", "REQUEST", request("Dinner on Friday", dinner),
+         offer({"place": "Sushi", "time": slot(18, 0, 90), "split_bill": True},
+               {"place": "Pasta", "time": slot(19, 0, 90), "split_bill": True})),
+        ("b", "COUNTER", reason("no_common_option"),
+         offer({"place": "Ramen", "time": slot(19, 0, 90), "split_bill": True},
+               {"place": "Pasta", "time": slot(19, 30, 90), "split_bill": True})),
+        ("a", "ACCEPT", {}, {"agreed": {"place": "Pasta", "time": slot(19, 30, 90),
+                                        "split_bill": True}}),
+    ]))
+
+    # A favour: a yes/no term and a day, agreed in two messages.
+    favor = [
+        {"name": "day", "kind": "choice", "options": ["Saturday", "Sunday"]},
+        {"name": "water_plants", "kind": "flag"},
+    ]
+    files.update(build_session("favor-ask", "favor.ask", [
+        ("a", "REQUEST", request("Water my plants this weekend", favor),
+         offer({"day": "Saturday", "water_plants": True},
+               {"day": "Sunday", "water_plants": True})),
+        ("b", "ACCEPT", {}, {"agreed": {"day": "Sunday", "water_plants": True}}),
+    ]))
+
+    # Open choice: no options are declared, so a counter may name a new gift.
+    gift = [
+        {"name": "gift", "kind": "choice"},
+        {"name": "budget", "kind": "amount", "unit": "JPY", "scale": 0,
+         "min": 1000, "max": 5000, "step": 500},
+    ]
+    files.update(build_session("gift-pick", "gift.pick", [
+        ("a", "REQUEST", request("Joint birthday gift for a friend", gift),
+         offer({"gift": "Coffee beans", "budget": 3000})),
+        ("b", "COUNTER", reason("policy_declined"),
+         offer({"gift": "Tea set", "budget": 3000},
+               {"gift": "Coffee beans", "budget": 2000})),
+        ("a", "ACCEPT", {}, {"agreed": {"gift": "Tea set", "budget": 3000}}),
+    ]))
+
+    # Agent cards (SPEC section 11). Issued in the past on purpose, so
+    # `verify-card` passes with the real clock.
+    for who, name in (("a", "Example A (test key only)"), ("b", "Example B (test key only)")):
+        node = NODES[who]
+        files[f"examples/cards/{who}.json"] = make_card(
+            node["private"], node["personal_agent_id"], name,
+            "https://relay.example/aun", "2026-10-01T09:00:00+09:00")
     return files
 
 

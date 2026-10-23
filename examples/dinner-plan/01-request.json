@@ -1,0 +1,65 @@
+{
+  "protocol": "aun/0.3",
+  "message_id": "f5744b8cbd5d49f410231bdfa3df4ac1",
+  "session_id": "session-dinner-plan",
+  "sender_agent_id": "agent-a",
+  "receiver_agent_id": "agent-b",
+  "sender_node_id": "agt_291e1df27cc1f0f9",
+  "receiver_node_id": "agt_ca07afd7b2241f78",
+  "message_type": "REQUEST",
+  "intent": "dinner.plan",
+  "session_version": 1,
+  "sequence": 1,
+  "payload": {
+    "topic": "Dinner on Friday",
+    "expires_at": "2099-01-02T09:00:00+09:00",
+    "issues": [
+      {
+        "name": "place",
+        "kind": "choice",
+        "options": [
+          "Sushi",
+          "Pasta",
+          "Ramen"
+        ]
+      },
+      {
+        "name": "time",
+        "kind": "time",
+        "duration_minutes": 90,
+        "window": {
+          "start": "2099-01-01T17:00+09:00",
+          "end": "2099-01-01T22:00+09:00"
+        }
+      },
+      {
+        "name": "split_bill",
+        "kind": "flag"
+      }
+    ]
+  },
+  "delta": {
+    "offer": [
+      {
+        "place": "Sushi",
+        "time": {
+          "start": "2099-01-01T18:00+09:00",
+          "end": "2099-01-01T19:30+09:00"
+        },
+        "split_bill": true
+      },
+      {
+        "place": "Pasta",
+        "time": {
+          "start": "2099-01-01T19:00+09:00",
+          "end": "2099-01-01T20:30+09:00"
+        },
+        "split_bill": true
+      }
+    ]
+  },
+  "nonce": "e07eaf19fc3e25a2fec287f53c1564aa",
+  "created_at": "2099-01-01T09:00:00+09:00",
+  "payload_hash": "f4f60a2150e0468c99d83af162055c45e30d19c03320bf6c00ae13e8c3631b3c",
+  "signature": "755X4D5WzsFZ6gs40zvtAznbPXqebrSl5R5xP9Nj1XUsyBTstBoDuQKON0mJeTE86ZM6/vnuNX3JwcwoyLF7Bg=="
+}

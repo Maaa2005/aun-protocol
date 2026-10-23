@@ -1,0 +1,24 @@
+{
+  "protocol": "aun/0.3",
+  "message_id": "f2a100288faa1a96130bb14a07e15dfb",
+  "session_id": "session-gift-pick",
+  "sender_agent_id": "agent-a",
+  "receiver_agent_id": "agent-b",
+  "sender_node_id": "agt_291e1df27cc1f0f9",
+  "receiver_node_id": "agt_ca07afd7b2241f78",
+  "message_type": "ACCEPT",
+  "intent": "gift.pick",
+  "session_version": 1,
+  "sequence": 3,
+  "payload": {},
+  "delta": {
+    "agreed": {
+      "gift": "Tea set",
+      "budget": 3000
+    }
+  },
+  "nonce": "354e059b248102449ed0986d8ac16197",
+  "created_at": "2099-01-01T09:00:20+09:00",
+  "payload_hash": "dbcb445748434853135982bf2dfcdd881375ac8cf9149740b403e67fce2f05b7",
+  "signature": "/AzyJlRcyvpLpDiGRKvQvx5fk4YCQ+VBybxOL/4Q161rlfBAeQOQlOtl0Bg3NOJ5B/3HewKGO8aMtmI8cdPpBA=="
+}

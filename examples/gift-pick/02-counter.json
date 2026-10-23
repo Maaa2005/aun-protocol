@@ -1,0 +1,32 @@
+{
+  "protocol": "aun/0.3",
+  "message_id": "6551eb2b6ee29ff8fa8425d5d39744be",
+  "session_id": "session-gift-pick",
+  "sender_agent_id": "agent-b",
+  "receiver_agent_id": "agent-a",
+  "sender_node_id": "agt_ca07afd7b2241f78",
+  "receiver_node_id": "agt_291e1df27cc1f0f9",
+  "message_type": "COUNTER",
+  "intent": "gift.pick",
+  "session_version": 1,
+  "sequence": 2,
+  "payload": {
+    "public_reason": "policy_declined"
+  },
+  "delta": {
+    "offer": [
+      {
+        "gift": "Tea set",
+        "budget": 3000
+      },
+      {
+        "gift": "Coffee beans",
+        "budget": 2000
+      }
+    ]
+  },
+  "nonce": "7f5612e51f68928ee9faa28f15b47107",
+  "created_at": "2099-01-01T09:00:10+09:00",
+  "payload_hash": "fbe8d9c5edfdad3cc34c038e58298dbb92ba449f55597e97bcae54ef89b567aa",
+  "signature": "m7AhM3CC5hDq8Uff4azlCwVrkxQLL4mYhG1mxNIqZgbDLx2U+8ePSKLA60AI3KQZKrb0Bm1SQRDVfZfQzUMLBw=="
+}

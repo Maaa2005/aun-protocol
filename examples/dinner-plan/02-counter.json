@@ -1,0 +1,40 @@
+{
+  "protocol": "aun/0.3",
+  "message_id": "1a1a2e0ddbb2f6cfc8cba0d566ecb09d",
+  "session_id": "session-dinner-plan",
+  "sender_agent_id": "agent-b",
+  "receiver_agent_id": "agent-a",
+  "sender_node_id": "agt_ca07afd7b2241f78",
+  "receiver_node_id": "agt_291e1df27cc1f0f9",
+  "message_type": "COUNTER",
+  "intent": "dinner.plan",
+  "session_version": 1,
+  "sequence": 2,
+  "payload": {
+    "public_reason": "no_common_option"
+  },
+  "delta": {
+    "offer": [
+      {
+        "place": "Ramen",
+        "time": {
+          "start": "2099-01-01T19:00+09:00",
+          "end": "2099-01-01T20:30+09:00"
+        },
+        "split_bill": true
+      },
+      {
+        "place": "Pasta",
+        "time": {
+          "start": "2099-01-01T19:30+09:00",
+          "end": "2099-01-01T21:00+09:00"
+        },
+        "split_bill": true
+      }
+    ]
+  },
+  "nonce": "586cef1fb94287cd67e4867f966a59e7",
+  "created_at": "2099-01-01T09:00:10+09:00",
+  "payload_hash": "28250139630f7499e59c479bfdbb69a9d45250b3773568a7e765b327cdb8cad9",
+  "signature": "TAv5KTiWymSmKUB2xBeHF+hfLy91lqmp+nOhv3PIMEYKHWYeW2md2vHIwpXXcfSeXZAJgeye8KYzXsXg8/qyBg=="
+}

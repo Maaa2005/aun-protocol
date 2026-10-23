@@ -1,5 +1,5 @@
 {
-  "protocol": "aun/0.2",
+  "protocol": "aun/0.3",
   "message_id": "90b3391e73a231082311c118dd9df9ff",
   "session_id": "session-meeting-schedule",
   "sender_agent_id": "agent-a",
@@ -11,25 +11,44 @@
   "session_version": 1,
   "sequence": 1,
   "payload": {
-    "intent": "meeting.schedule",
     "topic": "Project sync",
-    "duration_minutes": 30,
-    "date_range": {
-      "start": "2099-01-01",
-      "end": "2099-01-01"
-    },
-    "preferred_time_ranges": [
+    "expires_at": "2099-01-02T09:00:00+09:00",
+    "issues": [
       {
-        "start": "13:00",
-        "end": "15:00"
+        "name": "slot",
+        "kind": "time",
+        "duration_minutes": 30,
+        "window": {
+          "start": "2099-01-01T13:00+09:00",
+          "end": "2099-01-01T15:00+09:00"
+        }
       }
-    ],
-    "timezone": "Asia/Tokyo"
+    ]
   },
-  "delta": {},
-  "requires_human_approval": false,
+  "delta": {
+    "offer": [
+      {
+        "slot": {
+          "start": "2099-01-01T13:00+09:00",
+          "end": "2099-01-01T13:30+09:00"
+        }
+      },
+      {
+        "slot": {
+          "start": "2099-01-01T13:30+09:00",
+          "end": "2099-01-01T14:00+09:00"
+        }
+      },
+      {
+        "slot": {
+          "start": "2099-01-01T14:00+09:00",
+          "end": "2099-01-01T14:30+09:00"
+        }
+      }
+    ]
+  },
   "nonce": "6d4aa4d9a722f3137609bfc07c3872d5",
   "created_at": "2099-01-01T09:00:00+09:00",
-  "payload_hash": "472da822367f3c1107a7fb2d1f698d6b337a28ba62bb5d03c6ddc0768f2c9c0f",
-  "signature": "8Q4FStEho+UO70jZGNU8bTuJ/VJyAkyJq0gYHc9g0vc3wgc1qRyl7b9sofWLElgs0V+pY2PN0lN4NcuvYEhmDg=="
+  "payload_hash": "38e479a1006a9610924e25a3559119fecebcd47754e3bcba241ef6a45c77e932",
+  "signature": "FkEncTdIlRWO5jggRUailAvxZA39Yd9gT25QOp5Tj5xCLhUaFv4bJ9sQwitxCIB8e6KVnD+963KsBRlPV0/kBQ=="
 }

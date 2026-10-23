@@ -1,0 +1,48 @@
+{
+  "protocol": "aun/0.3",
+  "message_id": "2152915cd5186c40d2a0289321345056",
+  "session_id": "session-meeting-schedule-no-agreement",
+  "sender_agent_id": "agent-a",
+  "receiver_agent_id": "agent-b",
+  "sender_node_id": "agt_291e1df27cc1f0f9",
+  "receiver_node_id": "agt_ca07afd7b2241f78",
+  "message_type": "REQUEST",
+  "intent": "meeting.schedule",
+  "session_version": 1,
+  "sequence": 1,
+  "payload": {
+    "topic": "Project sync",
+    "expires_at": "2099-01-02T09:00:00+09:00",
+    "issues": [
+      {
+        "name": "slot",
+        "kind": "time",
+        "duration_minutes": 30,
+        "window": {
+          "start": "2099-01-01T09:00+09:00",
+          "end": "2099-01-01T18:00+09:00"
+        }
+      }
+    ]
+  },
+  "delta": {
+    "offer": [
+      {
+        "slot": {
+          "start": "2099-01-01T09:00+09:00",
+          "end": "2099-01-01T09:30+09:00"
+        }
+      },
+      {
+        "slot": {
+          "start": "2099-01-01T09:30+09:00",
+          "end": "2099-01-01T10:00+09:00"
+        }
+      }
+    ]
+  },
+  "nonce": "af97821fa558def8e8b055b38efbcad2",
+  "created_at": "2099-01-01T09:00:00+09:00",
+  "payload_hash": "c0a32479fa2fcfe647d8df0167d58a01ae10ef6be70455ff8b9a4c9009a9760e",
+  "signature": "qyGDHzjqLN4wbKw4N7i/gBjxkTIImPlbDn49cuK9M9JouA3hwXLPxOpoNYvpT6HGsehuv9P4YX1jF6byBNE0BQ=="
+}

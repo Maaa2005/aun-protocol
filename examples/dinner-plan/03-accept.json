@@ -1,0 +1,28 @@
+{
+  "protocol": "aun/0.3",
+  "message_id": "5799a04dcd31ba9e21b8c27361cd9aaf",
+  "session_id": "session-dinner-plan",
+  "sender_agent_id": "agent-a",
+  "receiver_agent_id": "agent-b",
+  "sender_node_id": "agt_291e1df27cc1f0f9",
+  "receiver_node_id": "agt_ca07afd7b2241f78",
+  "message_type": "ACCEPT",
+  "intent": "dinner.plan",
+  "session_version": 1,
+  "sequence": 3,
+  "payload": {},
+  "delta": {
+    "agreed": {
+      "place": "Pasta",
+      "time": {
+        "start": "2099-01-01T19:30+09:00",
+        "end": "2099-01-01T21:00+09:00"
+      },
+      "split_bill": true
+    }
+  },
+  "nonce": "cfe815dc115b0cff9e31c5f66715c836",
+  "created_at": "2099-01-01T09:00:20+09:00",
+  "payload_hash": "29b9e61783adb34521e309b54ebb384d42296db8f2f5be898ce170f71d4d9319",
+  "signature": "P7k0OnAdfTiJ8fFjfHpCOmMcxbZ3QiLqZZFdcIM6Uc4NNspI43CfhYMuN0CWoHj0CrBwKk64Lxsdr/gYaqpEBw=="
+}
