@@ -66,15 +66,15 @@ All 17 fields are required. No other field is allowed.
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `protocol` | string | Always `"aun/0.3"`. |
-| `message_id` | id | Unique per message. |
-| `session_id` | id | Chosen by the initiator in `REQUEST`. |
+| `message_id` | id | Unique per sender node. |
+| `session_id` | id | Chosen by the initiator in `REQUEST`. Unique per pair of nodes. |
 | `sender_agent_id` | id | Personal agent of the sender. |
 | `receiver_agent_id` | id | Personal agent of the receiver. |
 | `sender_node_id` | node ID | Device of the sender. Its key verifies `signature`. |
 | `receiver_node_id` | node ID | Device of the receiver. |
 | `message_type` | string | One of the types in section 3. |
 | `intent` | string | A dotted lowercase label naming the kind of agreement, for example `dinner.plan`. At most 64 characters, pattern `^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$`. Fixed for the session. |
-| `session_version` | integer 1 to 1000 | Fixed for the session. Senders use `1`. |
+| `session_version` | integer 1 to 1000 | Fixed for the session. Senders use `1`. A receiver accepts any value in range and holds the session to it. |
 | `sequence` | integer 1 to 5 | Position in the session, one counter shared by both parties. `REQUEST` is 1. Each message adds exactly 1. |
 | `payload` | object | Public context, by message type (section 3). |
 | `delta` | object | The offer, the agreed package, or a code (section 3). |
@@ -83,8 +83,20 @@ All 17 fields are required. No other field is allowed.
 | `payload_hash` | string | 64 lowercase hex (section 8). |
 | `signature` | string | Base64 of the 64-byte Ed25519 signature (section 8). |
 
-An **id** is a string of 1 to 128 characters. A **date-time** is RFC 3339
-with an offset, seconds optional.
+An **id** is a string of 1 to 128 characters. Senders SHOULD make
+`message_id`, `session_id` and `nonce` at least 128 random bits, for example a
+UUIDv4, so they never collide by chance.
+
+A **date-time** is RFC 3339 with `Z` or an offset, seconds optional, at most 6
+fraction digits. It must name a real instant: a calendar date that exists,
+hours 00 to 23, minutes and seconds 00 to 59 (no leap second), an offset of
+at most 23:59, and, converted to UTC, a year from 0001 to 9999. `-00:00` means
+UTC.
+
+Lengths count Unicode code points. Strings compare code point by code point,
+with no normalization. Every pattern in this document and in the schema
+matches the whole string with ECMA-262 meaning: `[0-9]` is ASCII only, and `$`
+does not match before a trailing newline.
 
 0.2's `requires_human_approval` is removed. Approval is a local step
 (section 7), so a field that announced it carried no checkable meaning.
@@ -171,8 +183,9 @@ Rules for the declaration:
   `HH:MM:00`) with an offset. The window start is before its end, the window is
   at most 31 days, and `duration_minutes` fits in it.
 - `amount`: an integer in the smallest unit. The real value is
-  `v × 10^-scale` in `unit`. `min ≤ max`. All integers are within
-  ±(2^53 - 1). There is no floating point anywhere in 0.3.
+  `v × 10^-scale` in `unit`. `min ≤ max`, and `max - min` is at most
+  2^53 - 1, so `v - min` stays exact in every language. All integers are
+  within ±(2^53 - 1). There is no floating point anywhere in 0.3.
 - The declaration is fixed for the session. Names, kinds, options, units and
   limits never change.
 
@@ -190,8 +203,13 @@ last offer sent), the last sender, the last `sequence`, the number of
 
 A `REQUEST` opens the session. The sender becomes the initiator, the receiver
 the responder. A `REQUEST` whose declaration is valid but whose offer is not
-opens no session either. A second `REQUEST` for a known `session_id` is
-dropped (`MESSAGE_REPLAYED`).
+opens no session either.
+
+A node knows a session by the other party's node ID together with
+`session_id`. The same `session_id` from another node is another session, so
+one peer cannot block or guess its way into a session of another. A second
+`REQUEST` for a session already known from the same node is dropped
+(`MESSAGE_REPLAYED`).
 
 ### 5.2 Turns
 
@@ -210,7 +228,8 @@ dropped (`MESSAGE_REPLAYED`).
 
 A message that breaks a turn rule is dropped with `INVALID_STATE_TRANSITION`.
 A message for an unknown session that is not a `REQUEST` is dropped the same
-way.
+way. That includes a message from a node that is not a party: for that node
+the session does not exist.
 
 ### 5.3 Deadline
 
@@ -233,7 +252,9 @@ way.
 
 - A **package** is an object with exactly one valid value (section 4) for
   every declared issue, and no other key.
-- An **offer** is `delta.offer`: 1 to 5 packages, no two the same. Offering
+- An **offer** is `delta.offer`: 1 to 5 packages, no two the same by the
+  comparison of section 4 (the same slot written with another offset is a
+  repeat). The order of packages carries no meaning. Offering
   whole packages keeps combinations intact: if a human approved "Sushi at
   18:00" and "Pasta at 19:00", the peer cannot pick "Sushi at 19:00".
 - An `ACCEPT` carries one package in `delta.agreed`. It MUST be the same,
@@ -279,6 +300,12 @@ The signature covers every field except `signature`.
 4. Set `signature` to the standard Base64, with padding, of the 64-byte
    signature.
 
+Base64 here, and for keys in section 11, is the one canonical form of RFC 4648
+section 4: standard alphabet, padding, no line breaks, and unused bits zero. A
+signature is therefore 88 characters whose last data character is one of `A`,
+`Q`, `g` or `w`. A receiver refuses every other spelling of the same bytes, so a
+message has one signed form.
+
 A receiver verifies with the key it holds for `sender_node_id` (section 11).
 It never takes the key from the message.
 
@@ -289,16 +316,21 @@ signed messages. The canonicalization did not change in 0.3.
 ## 9. Receiver checks
 
 Peer input is untrusted. A receiver runs these checks in order. A failed check
-drops the message, changes nothing and gets no reply.
+drops the message, changes nothing and gets no reply. Dropping is a MUST.
+Reporting the listed code locally SHOULD match this section; the vectors of
+section 14 check both.
 
 1. **Size.** At most 16384 bytes, checked before parsing. Else
    `MESSAGE_TOO_LARGE`. A sender MUST check the same limit. The total limit
    wins over the per-field limits.
-2. **Strict JSON.** One UTF-8 JSON object, nesting at most 8 levels, no
-   duplicate keys, no number with a fraction or exponent (so no `3000.0`), no
-   `NaN` or infinities. Else `MESSAGE_SCHEMA_INVALID`.
-3. **Schema.** The envelope matches the 0.3 schema. Else
+2. **Strict JSON.** One JSON object in valid UTF-8 with no byte order mark,
+   following I-JSON (RFC 7493): nesting at most 8 levels counting the
+   envelope as level 1, no duplicate keys, no lone surrogate (written or
+   escaped), and integers only, within ±(2^53 - 1). So no fraction or exponent
+   (no `3000.0`, no `1E0`), no `NaN` or infinities. Else
    `MESSAGE_SCHEMA_INVALID`.
+3. **Schema.** The envelope matches the 0.3 schema, and every date-time in it
+   is valid (section 2). Else `MESSAGE_SCHEMA_INVALID`.
 4. **Peer and address.** `sender_node_id` is a trusted peer (else
    `PEER_NOT_TRUSTED`), whose registered personal agent is `sender_agent_id`
    (else `AGENT_IDENTITY_MISMATCH`). `receiver_node_id` and
@@ -308,18 +340,21 @@ drops the message, changes nothing and gets no reply.
    `MESSAGE_SIGNATURE_INVALID`.
 6. **Time window.** `created_at` is within 300 seconds of the receiver's
    clock, in the past or the future. Else `MESSAGE_EXPIRED`.
-7. **Duplicates and replay.** A message whose `message_id` is known and whose
-   bytes, as JCS, are identical to the recorded one is a **duplicate**: it is
-   ignored without error. A different message with a known `message_id`, or a
-   nonce this sender node already used, is dropped (`MESSAGE_REPLAYED`).
+7. **Duplicates and replay.** A message whose `message_id` is known from the
+   same sender node and whose bytes, as JCS, are identical to the recorded one
+   is a **duplicate**: it is ignored without error. A different message with
+   a `message_id` known from that node, or a nonce that node already used, is
+   dropped (`MESSAGE_REPLAYED`).
 8. **State and payload.** Sections 5 and 6: the session, the turn, the
    deadline, the declaration and the packages. A message for a `sequence`
    already recorded is dropped (`MESSAGE_REPLAYED`).
 
-A node keeps message IDs and nonces at least until 300 seconds after the
-session deadline. After that the time window stops replayed copies.
+A node keeps message IDs and nonces, per sender node, at least until 300
+seconds after the session deadline. After that the time window stops replayed
+copies.
 
-A sender runs steps 1 to 3 and 8 on its own message before sending it.
+A sender runs steps 1 to 3, 7 and 8 on its own message before sending it. For
+step 7 that means it never reuses one of its own message IDs or nonces.
 
 ### Free text is data
 
@@ -428,8 +463,24 @@ This section is informative.
   and 6. It regenerates the files byte for byte.
 - `python tools/aun_reference.py check-session <dir> --keys examples/keys.json`
   replays one session through the receiver checks.
+- [test-vectors/receiver-v0.3.json](test-vectors/receiver-v0.3.json) holds
+  receiver cases for any language: sessions, turn and deadline rules, replay,
+  the limits of section 9, the order of its checks, and hostile input
+  (malformed JSON, dates and numbers). Each case starts a fresh node B that
+  trusts A and C but not D, and lists steps in order. A `receive` step gives
+  the message bytes in Base64, the receiver's clock `now`, and `expect`:
+  `accepted`, `duplicate` or the code of the drop. A `send` step is a message
+  B itself sends, after the sender checks of section 9. After the last step,
+  `final` is the status of B's session `s1` with A, or `null` if B has none.
+  A drop changes nothing. An implementation passes when every step gives
+  `expect` and every case ends with `final`. A receiver that drops the
+  message but reports another code still meets the MUST of section 9.
+- [tools/make_vectors.py](tools/make_vectors.py) builds that file byte for
+  byte, and `python tools/make_vectors.py --check` replays it through the
+  reference node.
 - `pytest -q` runs [tests/test_conformance.py](tests/test_conformance.py): the
-  JCS vectors, every example, and the dropped cases of sections 4 to 9.
+  JCS vectors, every example, the receiver vectors, and more dropped cases of
+  sections 4 to 9.
 
 Not covered by tests: approval (section 7), free text handling (section 9),
 double booking across sessions (section 7) and the unknown outcome of an

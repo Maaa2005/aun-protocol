@@ -11,6 +11,7 @@ the final say.
 - JSON Schema: [schemas/negotiation-message.schema.json](schemas/negotiation-message.schema.json)
 - Reference checker: [tools/aun_reference.py](tools/aun_reference.py)
 - Canonicalization (RFC 8785) test vectors: [test-vectors/jcs-v0.2.json](test-vectors/jcs-v0.2.json)
+- Receiver test vectors for any language: [test-vectors/receiver-v0.3.json](test-vectors/receiver-v0.3.json) (format in SPEC section 14)
 - Design note for 0.3: [docs/design-0.3.md](docs/design-0.3.md)
 
 A request declares the terms as a list of issues of four kinds (`choice`,

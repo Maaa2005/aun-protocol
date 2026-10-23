@@ -32,7 +32,8 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
     Ed25519PublicKey,
 )
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, validators
+from jsonschema.exceptions import ValidationError
 
 PROTOCOL = "aun/0.3"
 MAX_BYTES = 16384
@@ -41,13 +42,14 @@ WINDOW_SECONDS = 300
 MAX_COUNTERS = 3
 MAX_SESSION_DAYS = 7
 MAX_WINDOW_DAYS = 31
+MAX_INT = 2**53 - 1
 SCHEMA_PATH = (
     Path(__file__).resolve().parents[1] / "schemas" / "negotiation-message.schema.json"
 )
 
 _DATE_TIME = re.compile(
-    r"^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,6}))?)?"
-    r"(Z|[+-]\d{2}:\d{2})$"
+    r"([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2})"
+    r"(?::([0-9]{2})(?:\.([0-9]{1,6}))?)?(Z|[+-][0-9]{2}:[0-9]{2})"
 )
 
 
@@ -72,6 +74,19 @@ def node_id_from_public_key(raw32: bytes) -> str:
     if len(raw32) != 32:
         raise ValueError("public key must be 32 raw bytes")
     return "agt_" + hashlib.sha256(raw32).hexdigest()[:16]
+
+
+def b64decode_strict(text: str, length: int) -> bytes:
+    """Base64 with padding and no other form of the same bytes (SPEC section 2).
+
+    Unused trailing bits must be zero, so each byte string has one text.
+    """
+    if not isinstance(text, str):
+        raise ValueError("base64 value must be a string")
+    raw = base64.b64decode(text, validate=True)
+    if len(raw) != length or base64.b64encode(raw).decode("ascii") != text:
+        raise ValueError(f"not the canonical base64 of {length} bytes")
+    return raw
 
 
 def compute_payload_hash(payload: dict[str, Any], delta: dict[str, Any]) -> str:
@@ -120,41 +135,77 @@ def _reject_constant(text: str) -> Any:
     raise VerificationError("MESSAGE_SCHEMA_INVALID", f"{text} is not JSON")
 
 
-def _depth(value: Any) -> int:
-    if isinstance(value, dict):
-        return 1 + max((_depth(v) for v in value.values()), default=0)
-    if isinstance(value, list):
-        return 1 + max((_depth(v) for v in value), default=0)
-    return 0
+def _parse_int(text: str) -> int:
+    """I-JSON integers only: within plus or minus 2^53-1 (RFC 7493).
+
+    The length is checked first, so a huge number is refused before conversion.
+    """
+    if len(text.lstrip("-")) > 16 or abs(int(text)) > MAX_INT:
+        raise VerificationError("MESSAGE_SCHEMA_INVALID", "integer out of range")
+    return int(text)
 
 
-def parse_envelope_bytes(data: bytes) -> dict[str, Any]:
+def _check_tree(value: Any, level: int = 1) -> None:
+    """Nesting (the top-level object is level 1) and I-JSON strings.
+
+    A lone surrogate such as "\\ud800" is valid JSON syntax but not I-JSON
+    (RFC 7493), and JCS cannot encode it, so it is refused here.
+    """
+    if isinstance(value, str):
+        try:
+            value.encode("utf-8")
+        except UnicodeEncodeError as exc:
+            raise VerificationError("MESSAGE_SCHEMA_INVALID", "lone surrogate") from exc
+    elif isinstance(value, (dict, list)):
+        if level > MAX_DEPTH:
+            raise VerificationError("MESSAGE_SCHEMA_INVALID", "nested too deep")
+        children = (
+            [item for pair in value.items() for item in pair]
+            if isinstance(value, dict)
+            else value
+        )
+        for child in children:
+            _check_tree(child, level + 1)
+
+
+def parse_strict_json(data: bytes, max_bytes: int = MAX_BYTES) -> dict[str, Any]:
     """SPEC section 9 steps 1 and 2: size, then strict JSON."""
-    if len(data) > MAX_BYTES:
+    if len(data) > max_bytes:
         raise VerificationError("MESSAGE_TOO_LARGE", f"{len(data)} bytes")
+    if data.startswith(b"\xef\xbb\xbf"):
+        raise VerificationError("MESSAGE_SCHEMA_INVALID", "byte order mark")
     try:
         text = data.decode("utf-8")
         value = json.loads(
             text,
             object_pairs_hook=_no_duplicate_keys,
             parse_float=_reject_float,
+            parse_int=_parse_int,
             parse_constant=_reject_constant,
         )
-    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
+    except (UnicodeDecodeError, ValueError, RecursionError) as exc:
         raise VerificationError("MESSAGE_SCHEMA_INVALID", "not valid JSON") from exc
     if not isinstance(value, dict):
         raise VerificationError("MESSAGE_SCHEMA_INVALID", "not an object")
-    if _depth(value) > MAX_DEPTH:
-        raise VerificationError("MESSAGE_SCHEMA_INVALID", "nested too deep")
+    _check_tree(value)
     return value
+
+
+def parse_envelope_bytes(data: bytes) -> dict[str, Any]:
+    """SPEC section 9 steps 1 and 2 for a message."""
+    return parse_strict_json(data, MAX_BYTES)
 
 
 # ---- time ------------------------------------------------------------------
 
 
 def parse_time(text: str) -> datetime:
-    """RFC 3339 date-time with an offset. Works the same on all Python 3.9+."""
-    match = _DATE_TIME.match(text) if isinstance(text, str) else None
+    """RFC 3339 date-time with an offset, returned in UTC (SPEC section 3).
+
+    Works the same on all Python 3.9+. A leap second, a date that does not
+    exist and an instant outside years 0001 to 9999 in UTC raise ValueError.
+    """
+    match = _DATE_TIME.fullmatch(text) if isinstance(text, str) else None
     if not match:
         raise ValueError(f"bad date-time {text!r}")
     year, month, day, hour, minute, second, fraction, offset = match.groups()
@@ -167,33 +218,67 @@ def parse_time(text: str) -> datetime:
             raise ValueError(f"bad offset {offset!r}")
         tz = timezone(sign * timedelta(hours=hours, minutes=minutes))
     micro = int((fraction or "0").ljust(6, "0"))
-    return datetime(
+    local = datetime(
         int(year), int(month), int(day), int(hour), int(minute),
         int(second or 0), micro, tzinfo=tz,
     )
+    try:
+        return local.astimezone(timezone.utc)
+    except OverflowError as exc:
+        raise ValueError(f"{text!r} is outside years 0001 to 9999 in UTC") from exc
 
 
 # ---- schema ----------------------------------------------------------------
 
-_VALIDATOR: Draft202012Validator | None = None
+def _whole_string(validator: Any, pattern: str, instance: Any, schema: Any):
+    """`pattern` as ECMA-262 reads the schema: the whole string, ASCII only.
+
+    Python's `$` also matches before a final newline and `\\d` matches other
+    scripts' digits, so the stock keyword would accept "a\\n" for "^a$".
+    Every pattern in the schema is anchored with `^` and `$`.
+    """
+    if not validator.is_type(instance, "string"):
+        return
+    if re.fullmatch(f"(?:{pattern[1:-1]})", instance, re.ASCII) is None:
+        yield ValidationError(f"{instance!r} does not match {pattern!r}")
 
 
-def _validator() -> Draft202012Validator:
+_StrictValidator = validators.extend(Draft202012Validator, {"pattern": _whole_string})
+_VALIDATOR: Any = None
+
+
+def _validator() -> Any:
     global _VALIDATOR
     if _VALIDATOR is None:
         schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
-        _VALIDATOR = Draft202012Validator(schema)
+        _VALIDATOR = _StrictValidator(schema)
     return _VALIDATOR
 
 
+def _date_times(envelope: dict[str, Any]) -> list[str]:
+    """Every date-time in a message that already matches the schema."""
+    found = [envelope["created_at"]]
+    payload, delta = envelope["payload"], envelope["delta"]
+    if envelope["message_type"] == "REQUEST":
+        found.append(payload["expires_at"])
+        found += [t for i in payload["issues"] if "window" in i
+                  for t in (i["window"]["start"], i["window"]["end"])]
+    packages = delta.get("offer", []) + ([delta["agreed"]] if "agreed" in delta else [])
+    found += [t for p in packages for v in p.values() if isinstance(v, dict)
+              for t in (v["start"], v["end"])]
+    return found
+
+
 def validate_schema(envelope: dict[str, Any]) -> None:
+    """SPEC section 9 step 3: the schema, then every date-time is a real instant."""
     errors = sorted(_validator().iter_errors(envelope), key=lambda e: list(e.path))
     if errors:
         first = errors[0]
         where = "/".join(str(p) for p in first.path) or "(root)"
         raise VerificationError("MESSAGE_SCHEMA_INVALID", f"{where}: {first.message}")
     try:
-        parse_time(envelope["created_at"])
+        for text in _date_times(envelope):
+            parse_time(text)
     except ValueError as exc:
         raise VerificationError("MESSAGE_SCHEMA_INVALID", str(exc)) from exc
 
@@ -204,10 +289,10 @@ def verify_signature(envelope: dict[str, Any], public_key: str | bytes) -> None:
         raw_key = (
             public_key
             if isinstance(public_key, bytes)
-            else base64.b64decode(public_key, validate=True)
+            else b64decode_strict(public_key, 32)
         )
         key = Ed25519PublicKey.from_public_bytes(raw_key)
-        signature = base64.b64decode(envelope["signature"], validate=True)
+        signature = b64decode_strict(envelope["signature"], 64)
         signed = {k: v for k, v in envelope.items() if k != "signature"}
         key.verify(signature, canonical(signed))
     except (InvalidSignature, ValueError, TypeError, binascii.Error,
@@ -271,6 +356,8 @@ def validate_issues(issues: list[dict[str, Any]]) -> None:
         elif kind == "amount":
             if issue["min"] > issue["max"]:
                 raise _bad(f"{issue['name']}: min is above max")
+            if issue["max"] - issue["min"] > MAX_INT:
+                raise _bad(f"{issue['name']}: max minus min is above 2^53-1")
 
 
 def validate_value(issue: dict[str, Any], value: Any) -> None:
@@ -364,8 +451,8 @@ class Session:
 
     def expire_if_due(self, now: datetime) -> str:
         """SPEC section 5.3: an open session ends 300 s after `expires_at`."""
-        if self.status == "open" and now > self.expires_at + timedelta(
-            seconds=WINDOW_SECONDS
+        if self.status == "open" and now - timedelta(seconds=WINDOW_SECONDS) > (
+            self.expires_at
         ):
             self.status = "expired"
         return self.status
@@ -382,7 +469,7 @@ class Peer:
 
     @property
     def node_id(self) -> str:
-        return node_id_from_public_key(base64.b64decode(self.public_key))
+        return node_id_from_public_key(b64decode_strict(self.public_key, 32))
 
 
 @dataclass
@@ -390,13 +477,17 @@ class Node:
     """One side of the conversation: keeps sessions and seen message IDs.
 
     `trusted` maps node IDs to peers registered out of band (SPEC section 11).
+    A session ID is unique per pair of nodes, and a message ID and a nonce
+    per sender node (SPEC section 3), so every key includes a node ID:
+    `sessions` by (other node, session ID), `seen` by (sender node, message
+    ID) and `nonces` by (sender node, nonce).
     """
 
     agent_id: str
     private_key: Ed25519PrivateKey
     trusted: dict[str, Peer] = field(default_factory=dict)
-    sessions: dict[str, Session] = field(default_factory=dict)
-    seen: dict[str, bytes] = field(default_factory=dict)
+    sessions: dict[tuple[str, str], Session] = field(default_factory=dict)
+    seen: dict[tuple[str, str], bytes] = field(default_factory=dict)
     nonces: set[tuple[str, str]] = field(default_factory=set)
 
     @property
@@ -445,7 +536,7 @@ class Node:
         return "accepted"
 
     def _is_duplicate(self, envelope: dict[str, Any]) -> bool:
-        known = self.seen.get(envelope["message_id"])
+        known = self.seen.get((envelope["sender_node_id"], envelope["message_id"]))
         if known is None:
             return False
         if known == canonical(envelope):
@@ -474,8 +565,10 @@ class Node:
         if _party(envelope, "sender") != self.me:
             raise VerificationError("SESSION_BINDING_MISMATCH", "sender is not me")
         verify_signature(envelope, self.private_key.public_key().public_bytes_raw())
-        if envelope["message_id"] in self.seen:
+        if (self.node_id, envelope["message_id"]) in self.seen:
             raise VerificationError("MESSAGE_REPLAYED", "message_id reused")
+        if (self.node_id, envelope["nonce"]) in self.nonces:
+            raise VerificationError("MESSAGE_REPLAYED", "nonce reused")
         self._apply(envelope, now)
 
     # -- shared state machine ---------------------------------------------
@@ -485,7 +578,9 @@ class Node:
         sender = _party(envelope, "sender")
         receiver = _party(envelope, "receiver")
         created_at = parse_time(envelope["created_at"])
-        session = self.sessions.get(envelope["session_id"])
+        other = receiver if sender == self.me else sender
+        key = (other.node_id, envelope["session_id"])
+        session = self.sessions.get(key)
 
         if message_type == "REQUEST":
             if session is not None:
@@ -499,9 +594,9 @@ class Node:
                 raise VerificationError("SESSION_EXPIRED", "created after expires_at")
             self._check_and_advance(session, envelope)
 
-        self.seen[envelope["message_id"]] = canonical(envelope)
-        self.nonces.add((envelope["sender_node_id"], envelope["nonce"]))
-        self.sessions[session.session_id] = session
+        self.seen[(sender.node_id, envelope["message_id"])] = canonical(envelope)
+        self.nonces.add((sender.node_id, envelope["nonce"]))
+        self.sessions[key] = session
 
     def _open(
         self, envelope: dict[str, Any], sender: Party, receiver: Party,
@@ -512,7 +607,7 @@ class Node:
             expires_at = parse_time(payload["expires_at"])
         except ValueError as exc:
             raise _bad(str(exc)) from exc
-        if not created_at < expires_at <= created_at + timedelta(days=MAX_SESSION_DAYS):
+        if not timedelta(0) < expires_at - created_at <= timedelta(days=MAX_SESSION_DAYS):
             raise _bad(f"expires_at must be after created_at and within {MAX_SESSION_DAYS} days")
         issues = payload["issues"]
         validate_issues(issues)
@@ -612,7 +707,7 @@ def check_session(directory: Path, keys: dict[str, dict[str, str]],
         receiver = observers[envelope["receiver_node_id"]]
         if receiver.receive(data, at) != "accepted":
             raise ValueError(f"{path.name} is a duplicate")
-        session = receiver.sessions[envelope["session_id"]]
+        session = receiver.sessions[(envelope["sender_node_id"], envelope["session_id"])]
     return session
 
 
@@ -635,7 +730,7 @@ def main(argv: list[str] | None = None) -> int:
             envelope = parse_envelope_bytes(args.envelope.read_bytes())
             verify_envelope(envelope, args.public_key,
                             window_seconds=None if args.no_time_check else WINDOW_SECONDS)
-            expected = node_id_from_public_key(base64.b64decode(args.public_key))
+            expected = node_id_from_public_key(b64decode_strict(args.public_key, 32))
             if envelope["sender_node_id"] != expected:
                 raise VerificationError("AGENT_IDENTITY_MISMATCH",
                                         f"sender_node_id is not {expected}")

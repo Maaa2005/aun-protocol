@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 import aun_reference  # noqa: E402
 import make_examples  # noqa: E402
+import make_vectors  # noqa: E402
 from aun_reference import (  # noqa: E402
     MAX_BYTES,
     PROTOCOL,
@@ -110,6 +111,15 @@ class Conversation:
         """Signed bytes that skip the sender's own checks (a peer's message)."""
         fields = self.unsigned(who, *args, **kwargs)
         return encode(sign_envelope(fields, self.nodes[who].private_key))
+
+    def state(self, label: str, session_id: str | None = None):
+        """The session as node `label` holds it, keyed by the other party."""
+        node = self.nodes[label]
+        for (other, sid), session in node.sessions.items():
+            if sid == (session_id or self.session_id):
+                assert other in {session.initiator.node_id, session.responder.node_id}
+                return session
+        raise KeyError(session_id or self.session_id)
 
     def exchange(self, who: str, to: str, *args, now: datetime | None = None,
                  **kwargs) -> bytes:
@@ -279,7 +289,7 @@ def test_fourth_counter_is_rejected_on_both_sides():
     dropped("INVALID_STATE_TRANSITION", conv.nodes["b"], data, at)
     # REJECT is still allowed as the fifth message.
     conv.exchange("a", "b", "REJECT", reason, {"code": "NO_AGREEMENT"}, 5)
-    assert conv.nodes["b"].sessions["s1"].status == "rejected"
+    assert conv.state("b").status == "rejected"
 
 
 def test_offer_of_six_packages_fails_schema():
@@ -298,11 +308,11 @@ def test_case1_unapproved_combination_is_dropped():
     data = conv.signed("b", "a", "ACCEPT", {},
                        {"agreed": {"place": "Sushi", "time": slot(19)}}, 2)
     dropped("INVALID_NEGOTIATION_PAYLOAD", conv.nodes["a"], data, at)
-    assert conv.nodes["a"].sessions["s1"].status == "open"
-    assert conv.nodes["a"].sessions["s1"].sequence == 1
+    assert conv.state("a").status == "open"
+    assert conv.state("a").sequence == 1
     conv.exchange("b", "a", "ACCEPT", {},
                   {"agreed": {"place": "Pasta", "time": slot(19)}}, 2)
-    assert conv.nodes["a"].sessions["s1"].status == "agreed"
+    assert conv.state("a").status == "agreed"
 
 
 def test_case2a_value_outside_declared_options_is_dropped():
@@ -319,7 +329,7 @@ def test_case2b_open_choice_takes_a_new_value():
     conv.exchange("b", "a", "COUNTER", {"public_reason": "no_common_option"},
                   {"offer": [{"place": "Ramen"}]}, 2)
     conv.exchange("a", "b", "ACCEPT", {}, {"agreed": {"place": "Ramen"}}, 3)
-    assert conv.nodes["b"].sessions["s1"].agreed == {"place": "Ramen"}
+    assert conv.state("b").agreed == {"place": "Ramen"}
 
 
 def test_case3a_accept_created_in_time_received_after_deadline():
@@ -328,7 +338,7 @@ def test_case3a_accept_created_in_time_received_after_deadline():
     conv.exchange("b", "a", "ACCEPT", {},
                   {"agreed": {"place": "Pasta", "time": slot(19)}}, 2,
                   at=created, now=created + timedelta(seconds=200))
-    assert conv.nodes["a"].sessions["s1"].status == "agreed"
+    assert conv.state("a").status == "agreed"
 
 
 def test_case3b_accept_created_after_deadline_is_dropped():
@@ -348,7 +358,7 @@ def test_case4a_identical_resend_is_a_duplicate():
     conv = open_dinner()
     data = conv.exchange("b", "a", "ACCEPT", {},
                          {"agreed": {"place": "Pasta", "time": slot(19)}}, 2)
-    session = conv.nodes["a"].sessions["s1"]
+    session = conv.state("a")
     before = (session.status, session.sequence, dict(session.agreed))
     assert conv.nodes["a"].receive(data, T0 + timedelta(seconds=30)) == "duplicate"
     assert (session.status, session.sequence, session.agreed) == before
@@ -377,7 +387,7 @@ def test_turns_alternate_in_both_directions():
     conv.exchange("a", "b", "COUNTER", reason, {"offer": [{"share": 2500}]}, 3)
     conv.exchange("b", "a", "ACCEPT", {}, {"agreed": {"share": 2500}}, 4)
     for label in "ab":
-        assert conv.nodes[label].sessions["s1"].status == "agreed"
+        assert conv.state(label).status == "agreed"
 
 
 def test_same_party_twice_is_not_its_turn():
@@ -388,11 +398,37 @@ def test_same_party_twice_is_not_its_turn():
 
 
 def test_third_party_cannot_join_a_session():
+    """Sessions are per pair of nodes: C has no session s1 with B."""
     nodes = make_nodes()
     conv = open_dinner(nodes)
     data = conv.signed("c", "b", "ACCEPT", {},
                        {"agreed": {"place": "Pasta", "time": slot(19)}}, 2)
-    dropped("SESSION_BINDING_MISMATCH", nodes["b"], data, T0)
+    dropped("INVALID_STATE_TRANSITION", nodes["b"], data, T0)
+    assert conv.state("b").status == "open"
+
+
+def test_same_ids_from_another_peer_are_a_separate_session():
+    """Session, message IDs and nonces are unique per node, not worldwide."""
+    nodes = make_nodes()
+    first = open_dinner(nodes)
+    second = Conversation(nodes)  # same session ID, message IDs and nonces
+    second.exchange("c", "b", "REQUEST", request([AMOUNT]), {"offer": [{"share": 0}]}, 1)
+    second.exchange("b", "c", "ACCEPT", {}, {"agreed": {"share": 0}}, 2)
+    assert len(nodes["b"].sessions) == 2
+    assert first.state("b").status == "open"
+    assert nodes["b"].sessions[(nodes["c"].node_id, "s1")].status == "agreed"
+
+
+def test_sender_never_reuses_its_own_nonce():
+    conv = open_dinner()  # A's REQUEST used nonce s1-n1
+    conv.exchange("b", "a", "COUNTER", {"public_reason": "no_common_option"},
+                  {"offer": [{"place": "Pasta", "time": slot(20)}]}, 2)
+    fields = conv.unsigned("a", "b", "ACCEPT", {},
+                           {"agreed": {"place": "Pasta", "time": slot(20)}}, 3,
+                           nonce="s1-n1")
+    with pytest.raises(VerificationError) as caught:
+        conv.nodes["a"].send(fields, T0 + timedelta(seconds=3))
+    assert caught.value.code == "MESSAGE_REPLAYED"
 
 
 def test_message_for_another_node_is_dropped():
@@ -429,7 +465,7 @@ def test_error_only_answers_a_request():
     dropped("INVALID_STATE_TRANSITION", conv.nodes["b"], data, T0)
     fresh = open_dinner()
     fresh.exchange("b", "a", "ERROR", {}, {"code": "NOT_SUPPORTED"}, 2)
-    assert fresh.nodes["a"].sessions["s1"].status == "not_supported"
+    assert fresh.state("a").status == "not_supported"
 
 
 # ---- deadline --------------------------------------------------------------
@@ -437,7 +473,7 @@ def test_error_only_answers_a_request():
 
 def test_open_session_expires_300_seconds_after_deadline():
     conv = open_dinner()
-    session = conv.nodes["b"].sessions["s1"]
+    session = conv.state("b")
     assert session.expire_if_due(EXPIRES + timedelta(seconds=300)) == "open"
     assert session.expire_if_due(EXPIRES + timedelta(seconds=301)) == "expired"
 
@@ -490,7 +526,7 @@ def test_slots_compare_as_instants():
     conv = Conversation(make_nodes())
     conv.exchange("a", "b", "REQUEST", request([TIME]), {"offer": [{"time": slot(18)}]}, 1)
     conv.exchange("b", "a", "ACCEPT", {}, {"agreed": {"time": slot(18, tz=timezone.utc)}}, 2)
-    assert conv.nodes["a"].sessions["s1"].status == "agreed"
+    assert conv.state("a").status == "agreed"
 
 
 def test_offer_repeating_a_package_is_dropped():
@@ -605,3 +641,46 @@ def test_cli_check_session_roundtrip(capsys):
                                "--keys", str(EXAMPLES / "keys.json")])
     assert code == 0
     assert "agreed after 3 messages" in capsys.readouterr().out
+
+
+# ---- shared vectors (test-vectors/receiver-v0.3.json) ---------------------
+#
+# Receiver cases for other implementations, hostile input included. Each case
+# replays through a fresh node B; a drop must leave B's state unchanged.
+
+VECTORS = json.loads((ROOT / make_vectors.OUTPUT).read_text(encoding="utf-8"))
+
+
+def test_regenerating_vectors_is_byte_identical():
+    assert make_vectors.build() == (ROOT / make_vectors.OUTPUT).read_bytes()
+
+
+def test_vectors_use_only_defined_codes():
+    codes = {step["expect"] for case in VECTORS["cases"] for step in case["steps"]}
+    spec = (ROOT / "SPEC.md").read_text(encoding="utf-8")
+    assert {"accepted", "duplicate"} <= codes
+    assert all(f"`{code}`" in spec for code in codes - {"accepted", "duplicate"})
+
+
+@pytest.mark.parametrize("case", VECTORS["cases"], ids=lambda case: case["name"])
+def test_vector_case(case):
+    expected = ([step["expect"] for step in case["steps"]], case["final"])
+    assert make_vectors.run_case(case) == expected
+
+
+def test_every_schema_pattern_is_anchored():
+    schema = json.loads(aun_reference.SCHEMA_PATH.read_text(encoding="utf-8"))
+    found = []
+
+    def walk(node):
+        if isinstance(node, dict):
+            if isinstance(node.get("pattern"), str):
+                found.append(node["pattern"])
+            for child in node.values():
+                walk(child)
+        elif isinstance(node, list):
+            for child in node:
+                walk(child)
+
+    walk(schema)
+    assert found and all(p.startswith("^") and p.endswith("$") for p in found)
