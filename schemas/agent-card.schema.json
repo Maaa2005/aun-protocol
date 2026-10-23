@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Maaa2005/aun-protocol/blob/main/schemas/agent-card.schema.json",
+  "title": "AUN agent card aun-card/1",
+  "description": "Self-signed agent card of AUN Protocol 0.3. Shapes only: the card checks and the update rule are in SPEC.md section 11. The total limit of 2048 bytes wins over the field limits.",
+  "type": "object",
+  "properties": {
+    "version": {"const": "aun-card/1"},
+    "node_id": {"$ref": "#/$defs/node_id"},
+    "agent_id": {"$ref": "#/$defs/id"},
+    "public_key": {"type": "string", "pattern": "^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$"},
+    "display_name": {"$ref": "#/$defs/text"},
+    "protocol_versions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1, "maxLength": 32}
+    },
+    "relay_endpoint": {"type": "string", "pattern": "^https://[!-~]{1,248}$"},
+    "issued_at": {"$ref": "#/$defs/date_time"},
+    "signature": {"type": "string", "pattern": "^[A-Za-z0-9+/]{85}[AQgw]==$"}
+  },
+  "required": [
+    "version",
+    "node_id",
+    "agent_id",
+    "public_key",
+    "display_name",
+    "protocol_versions",
+    "relay_endpoint",
+    "issued_at",
+    "signature"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "node_id": {"type": "string", "pattern": "^agt_[0-9a-f]{16}$"},
+    "date_time": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}(:[0-9]{2}(\\.[0-9]{1,6})?)?(Z|[+-][0-9]{2}:[0-9]{2})$"
+    },
+    "text": {"type": "string", "minLength": 1, "maxLength": 100}
+  }
+}

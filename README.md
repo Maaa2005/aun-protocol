@@ -8,10 +8,12 @@ Each agent discloses only the options its human approved, and the human keeps
 the final say.
 
 - Specification: [SPEC.md](SPEC.md) (version `aun/0.3`)
-- JSON Schema: [schemas/negotiation-message.schema.json](schemas/negotiation-message.schema.json)
+- JSON Schemas: [messages](schemas/negotiation-message.schema.json) and
+  [agent cards](schemas/agent-card.schema.json)
 - Reference checker: [tools/aun_reference.py](tools/aun_reference.py)
 - Canonicalization (RFC 8785) test vectors: [test-vectors/jcs-v0.2.json](test-vectors/jcs-v0.2.json)
 - Receiver test vectors for any language: [test-vectors/receiver-v0.3.json](test-vectors/receiver-v0.3.json) (format in SPEC section 14)
+- Agent card test vectors: [test-vectors/card-v1.json](test-vectors/card-v1.json) (format in SPEC section 14)
 - Design note for 0.3: [docs/design-0.3.md](docs/design-0.3.md)
 
 A request declares the terms as a list of issues of four kinds (`choice`,
@@ -30,7 +32,12 @@ python tools/aun_reference.py verify examples/meeting-schedule/02-accept.json \
   --public-key ny9olPZA86PrrqKq4Zfafzj4/p1/+6DGKmrCIPKzFg0= --no-time-check
 python tools/aun_reference.py check-session examples/dinner-plan \
   --keys examples/keys.json
+python tools/aun_reference.py verify-card examples/cards/a.json
 ```
+
+Two agents trust each other by exchanging signed agent cards in person, for
+example as a QR code. A later card from the same key can update the name and
+the relay address but never the key (SPEC section 11).
 
 The keys in `examples/keys.json` are for tests only.
 

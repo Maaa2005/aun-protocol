@@ -159,6 +159,16 @@ apart from what the node verified (who, which package, approved or not).
   Its top-level `protocol_versions` lists `aun/0.3`. All four kinds are
   mandatory, so the card does not list them. Accepting a format is not the
   same as accepting a domain: a node may still answer `NOT_SUPPORTED`.
+- Card updates: a later card may change the name, versions and relay address,
+  never the key or the agent. The node ID has only 64 bits, so a colliding key
+  can be searched for: the in-person step covers the whole key, and a card
+  whose key differs from the stored one is refused instead of replacing it.
+  Updates must be strictly later as an instant, so a resent or older card
+  cannot roll the address back. A card may be dated at most 300 seconds ahead,
+  else one card dated far ahead would block every later update. There is no
+  lower limit, so a peer that was offline for a long time still works. A lost
+  key means a new peer, trusted again in person. Revocation, expiry and key
+  rotation are left for later.
 - `aun/0.1` is not part of 0.3. No automatic fallback to older versions.
 - Limit probing by repeated sessions is a local policy matter. The
   specification does not claim it is prevented.
