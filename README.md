@@ -1,5 +1,9 @@
 # AUN Protocol
 
+Status: draft. No compatibility guarantee between 0.x versions.
+
+The reference implementation was split out of [ENISHI](https://github.com/Maaa2005/ENISHI), a desktop app whose development stopped on 2026-10-23. AUN continues here on its own.
+
 AUN is a signed message protocol for personal AI agents that agree on terms on
 behalf of their owners: a time, a place, an amount, a yes or no, or any mix of
 them. The name comes from *a-un no kokyu*, two people who agree without many

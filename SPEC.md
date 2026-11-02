@@ -592,3 +592,72 @@ double booking across sessions (section 7), the unknown outcome of an
 unconfirmed `ACCEPT` (section 5.3), the in-person step, durable and atomic
 card storage, and how a node uses `relay_endpoint` (section 11). These are
 local duties a receiver cannot observe.
+
+## 15. Security considerations
+
+This section states what 0.3 gives and what it does not. It adds no rule.
+
+What holds today:
+
+- **Authenticity and integrity.** Every message carries an Ed25519 signature
+  (RFC 8032) over the JCS form (RFC 8785) of every field but `signature`
+  (section 8). A receiver that holds the sender's key (section 11) can tell
+  that the message came from that key and was not changed. A card is signed
+  the same way by its own key (section 11.2).
+- **Replay and ordering.** Time window, duplicate, session and turn checks
+  (sections 5 and 9) stop a copy of a valid message from being used again or
+  out of turn.
+- **Trust comes from the in-person step.** A signature proves only that the
+  signer holds the key. Who the human behind the key is comes from the
+  in-person exchange of the card (section 11).
+
+What does not hold:
+
+- **No confidentiality.** Messages are signed, not encrypted. The relay and
+  every other hop that carries a message can read `topic`, the issue
+  declarations, every offered package, counter-offers and `public_reason`, and
+  can see who talks to whom, when, and how much. Transport encryption to the
+  relay, such as TLS, protects only that hop and is outside this document.
+- **"Disclose only approved options" is a rule about what the agent chooses to
+  send** (sections 7 and 10). It is not a property of the encoding. Anything
+  that an agent sends is readable by the relay and by the peer.
+- **No delivery guarantee.** A relay or network can drop, delay or withhold a
+  message (sections 5.3 and 11.3).
+
+### Known limitations (non-normative, planned for a future version)
+
+This list is informative. It does not change any requirement above, and
+nothing here is a promise of a design.
+
+- **Small-order public keys.** The card checks (section 11.2) do not reject an
+  Ed25519 public key of small order. A card with such a key can let anyone
+  produce signatures that verify for it, without any private key.
+- **Short node ID.** `node_id` has 64 bits (section 2). Section 11.3 explains
+  how the stored key and the in-person step cover this.
+- **No transport binding.** How a message is sent to `relay_endpoint` (HTTP
+  method, path, authentication, delivery and retry) is not specified
+  (section 11.4).
+- **Decimal numbers in the JCS vectors.** `test-vectors/jcs-v0.2.json`
+  contains numbers that are not integers (`4.5`, `0.000001`) although 0.3
+  allows integers only (section 9, step 2). An implementation that supports
+  only integers cannot reproduce those cases; a future version will resolve
+  this conflict.
+- **No character-set restriction on IDs and free text.** IDs, issue strings,
+  `topic` and `display_name` are limited in length only (sections 2, 3 and
+  11.1). They can contain control characters and bidirectional (bidi)
+  characters that make text look different from what it is. Section 9 already
+  says that free text is data.
+
+## 16. Normative references
+
+- RFC 2119, Key words for use in RFCs to Indicate Requirement Levels.
+- RFC 3339, Date and Time on the Internet: Timestamps (section 2).
+- RFC 4648, The Base16, Base32, and Base64 Data Encodings, section 4
+  (section 8).
+- RFC 7493, The I-JSON Message Format (section 9, step 2).
+- RFC 8032, Edwards-Curve Digital Signature Algorithm (EdDSA), for Ed25519
+  (sections 2, 8 and 11).
+- RFC 8785, JSON Canonicalization Scheme (JCS) (section 8).
+- ECMA-262, ECMAScript Language Specification, for the meaning of patterns
+  (section 2).
+- JSON Schema 2020-12, for the schemas.
