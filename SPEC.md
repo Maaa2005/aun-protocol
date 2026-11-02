@@ -642,9 +642,9 @@ nothing here is a promise of a design.
   allows integers only (section 9, step 2). An implementation that supports
   only integers cannot reproduce those cases; a future version will resolve
   this conflict.
-- **No character-set restriction on IDs and free text.** IDs, issue strings,
-  `topic` and `display_name` are limited in length only (sections 2, 3 and
-  11.1). They can contain control characters and bidirectional (bidi)
+- **No character-set restriction on IDs and free text.** IDs, option strings,
+  units, `topic` and `display_name` are limited in length only (sections 2,
+  3, 4 and 11.1); only issue names have a fixed pattern (section 4). They can contain control characters and bidirectional (bidi)
   characters that make text look different from what it is. Section 9 already
   says that free text is data.
 
