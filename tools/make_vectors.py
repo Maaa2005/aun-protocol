@@ -382,6 +382,23 @@ def build_cases() -> dict[str, dict[str, Any]]:
         receive(opening(), "accepted"), send(accept("b", 2, pasta19)),
         receive(counter("a", 3, "Sushi", 20, created_at=held(1).isoformat()), state, held(1))],
         "agreed")
+    other_ids = {"message_id": "s1-m7", "nonce": "s1-n7"}
+    cases["a repeated sequence comes before a closed session"] = ([
+        receive(opening(), "accepted"), send(accept("b", 2, pasta19)),
+        receive(counter("a", 2, "Sushi", 20, **other_ids), replayed)], "agreed")
+    cases["a repeated sequence comes before late arrival"] = (
+        dinner_with_counter() + [
+            receive(counter("a", 2, "Sushi", 21, **other_ids), replayed, held(301))], "expired")
+    cases["sequence comes before a created_at after the deadline"] = (
+        dinner_with_counter() + [
+            receive(counter("a", 4, "Sushi", 21, created_at=held(1).isoformat()), state, held(1))],
+        "open")
+    too_early = (T0 - timedelta(seconds=301)).isoformat()
+    cases["sequence comes before a created_at too early"] = (
+        dinner_with_counter() + [receive(counter("a", 4, "Sushi", 21, created_at=too_early), state)],
+        "open")
+    cases["a sender does not send its own message twice"] = (
+        dinner_with_counter() + [send(counter("b", 2, "Pasta", 20), replayed)], "open")
     cases["ERROR only answers REQUEST"] = (
         dinner_with_counter() + [receive(
             signed("a", "ERROR", {}, {"code": "NOT_SUPPORTED"}, 3), state)], "open")
