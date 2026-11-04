@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/Maaa2005/aun-protocol/blob/main/schemas/negotiation-message.schema.json",
-  "title": "AUN Protocol 0.3 message",
-  "description": "Signed envelope of AUN Protocol 0.3. Shapes only: the rules that relate a package to its declaration or to the standing offer are in SPEC.md section 6.",
+  "title": "AUN Protocol 0.4 message",
+  "description": "Signed envelope of AUN Protocol 0.4. Shapes only: the rules that relate a package to its declaration or to the standing offer are in SPEC.md section 6.",
   "type": "object",
   "properties": {
-    "protocol": {"const": "aun/0.3"},
+    "protocol": {"const": "aun/0.4"},
     "message_id": {"$ref": "#/$defs/id"},
     "session_id": {"$ref": "#/$defs/id"},
     "sender_agent_id": {"$ref": "#/$defs/id"},
@@ -18,7 +18,6 @@
       "maxLength": 64,
       "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$"
     },
-    "session_version": {"type": "integer", "minimum": 1, "maximum": 1000},
     "sequence": {"type": "integer", "minimum": 1, "maximum": 5},
     "payload": {"type": "object"},
     "delta": {"type": "object"},
@@ -37,7 +36,6 @@
     "receiver_node_id",
     "message_type",
     "intent",
-    "session_version",
     "sequence",
     "payload",
     "delta",
@@ -114,8 +112,8 @@
     }
   ],
   "$defs": {
-    "id": {"type": "string", "minLength": 1, "maxLength": 128},
-    "node_id": {"type": "string", "pattern": "^agt_[0-9a-f]{16}$"},
+    "id": {"type": "string", "pattern": "^[A-Za-z0-9._~:-]{1,128}$"},
+    "node_id": {"type": "string", "pattern": "^agt_[0-9a-f]{32}$"},
     "date_time": {
       "type": "string",
       "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}(:[0-9]{2}(\\.[0-9]{1,6})?)?(Z|[+-][0-9]{2}:[0-9]{2})$"

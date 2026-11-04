@@ -1,4 +1,4 @@
-"""Deterministic generator for test-vectors/card-v1.json (format: FORMAT below).
+"""Deterministic generator for test-vectors/card-v2.json (format: FORMAT below).
 
 Usage:
   python tools/make_card_vectors.py           write the file
@@ -8,6 +8,7 @@ Usage:
 from __future__ import annotations
 
 import base64
+import hashlib
 import copy
 import json
 import sys
@@ -22,14 +23,16 @@ from aun_reference import (  # noqa: E402
     PROTOCOL,
     Node,
     VerificationError,
+    canonical,
     encode_card,
+    node_id_from_public_key,
     parse_time,
     sign_card,
 )
 from make_examples import TEST_ONLY_NOTE, _node  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-OUTPUT = "test-vectors/card-v1.json"
+OUTPUT = "test-vectors/card-v2.json"
 
 JST = timezone(timedelta(hours=9))
 T0 = datetime(2099, 1, 1, 9, 0, tzinfo=JST)
@@ -47,6 +50,24 @@ FORMAT = [
     "A refusal changes nothing. After the last step, `final` is the `issued_at` of the",
     "card B stores for node A, as written in that card, or null when B stores none.",
 ]
+
+
+# Every small-order point, both sign bits, and a y that is not canonical.
+WEAK_KEYS = {
+    "order_1": "01" + "00" * 31,
+    "order_1_sign": "01" + "00" * 30 + "80",
+    "order_2": "ec" + "ff" * 30 + "7f",
+    "order_2_sign": "ec" + "ff" * 31,
+    "order_4": "00" * 32,
+    "order_4_sign": "00" * 31 + "80",
+    "order_8_a": "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05",
+    "order_8_a_sign": "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc85",
+    "order_8_b": "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a",
+    "order_8_b_sign": "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa",
+    "y_is_p": "ed" + "ff" * 30 + "7f",
+    "y_is_p_plus_1": "ee" + "ff" * 30 + "7f",
+    "y_largest": "ff" * 31 + "7f",
+}
 
 
 # ---- cards ------------------------------------------------------------------
@@ -104,6 +125,33 @@ def raw(data: bytes, old: bytes, new: bytes) -> bytes:
     return data.replace(old, new)
 
 
+ORDER = 2**252 + 27742317777372353535851937790883648493
+
+
+def with_s_plus_l(data: bytes) -> bytes:
+    """The same signature with S + L: it passes a check that skips S < L."""
+    parsed = json.loads(data)
+    signature = base64.b64decode(parsed["signature"])
+    s = int.from_bytes(signature[32:], "little") + ORDER
+    return tampered(data, signature=base64.b64encode(signature[:32] + s.to_bytes(32, "little"))
+                    .decode("ascii"))
+
+
+def with_identity_r() -> bytes:
+    """Card A signed by its own key with R = the identity and S = h * a."""
+    parsed = fields("a", T0)
+    seed = KEYS["a"]["private"].private_bytes_raw()
+    scalar = bytearray(hashlib.sha512(seed).digest()[:32])
+    scalar[0] &= 248
+    scalar[31] = (scalar[31] & 127) | 64
+    r = bytes([1]) + bytes(31)
+    public = base64.b64decode(KEYS["a"]["public_key"])
+    h = int.from_bytes(hashlib.sha512(r + public + canonical(parsed)).digest(), "little")
+    s = h * int.from_bytes(scalar, "little") % ORDER
+    parsed["signature"] = base64.b64encode(r + s.to_bytes(32, "little")).decode("ascii")
+    return encode_card(parsed)
+
+
 def spare_bits_key() -> str:
     """The same key with the last data character moved: another spelling of the bytes."""
     key = KEYS["a"]["public_key"]
@@ -144,7 +192,7 @@ def build_cases() -> dict[str, dict[str, Any]]:
         """One step, in person. A card that is refused stores nothing."""
         cases[name] = ([step(data, expect, True, now)], final)
 
-    # The update rule (section 11.2 step 8, section 11.3).
+    # The update rule (section 11.2 step 9, section 11.3).
     cases["first_in_person"] = ([step(a0(), "trusted", True)], t0)
     cases["first_via_relay"] = ([step(a0(), not_trusted)], None)
     cases["later_update"] = ([step(a0(), "trusted", True), step(a1(), "updated")], t1)
@@ -171,12 +219,32 @@ def build_cases() -> dict[str, dict[str, Any]]:
         step(card("c", T0), "trusted", True),
         step(card("c", LATER, display_name="Node C (new)"), "updated")], t0)
 
-    # Identity and signature (steps 4 and 5).
+    # Identity and signature (steps 4 and 6).
     single("node_id_not_derived", card("c", T0, node_id=KEYS["a"]["node_id"]), mismatch)
     single("signed_by_other_key", card("a", T0, signer="c"), bad_sig)
     single("tampered_after_signing", tampered(a0(), display_name="Changed"), bad_sig)
 
-    # Version and clock (steps 6 and 7).
+    # Weak keys (step 5), before the signature, because such a key can pass it.
+    for name, hex_key in WEAK_KEYS.items():
+        raw_key = bytes.fromhex(hex_key)
+        single(f"weak_key_{name}", card(
+            "a", T0, public_key=base64.b64encode(raw_key).decode("ascii"),
+            node_id=node_id_from_public_key(raw_key)), "CARD_KEY_WEAK")
+
+    # Signatures only the key's holder can make (step 6, section 8).
+    single("signature_s_above_the_order", with_s_plus_l(a0()), bad_sig)
+    single("signature_identity_r", with_identity_r(), bad_sig)
+
+    # Characters (step 3).
+    single("display_name_with_override", card("a", T0, display_name="Node \u202eA"), schema)
+    single("display_name_with_tag", card("a", T0, display_name="Node \U000e0041"), schema)
+    single("display_name_with_newline", card("a", T0, display_name="Node\nA"), schema)
+    single("display_name_with_joiner", card("a", T0, display_name="\U0001f468\u200d\U0001f373"),
+           "trusted", final=t0)
+    single("agent_id_not_ascii", card("a", T0, agent_id="エージェント"), schema)
+    single("version_entry_not_ascii", card("a", T0, protocol_versions=[PROTOCOL, "版"]), schema)
+
+    # Version and clock (steps 7 and 8).
     single("version_only_0_2", card("a", T0, protocol_versions=["aun/0.2"]), no_version)
     single("version_unknown_extra",
            card("a", T0, protocol_versions=[PROTOCOL, "aun/9.9"]), "trusted", final=t0)
@@ -200,7 +268,7 @@ def build_cases() -> dict[str, dict[str, Any]]:
            schema)
     single("empty_versions", card("a", T0, protocol_versions=[]), schema)
     single("duplicate_versions", card("a", T0, protocol_versions=[PROTOCOL, PROTOCOL]), schema)
-    single("version_aun_card_2", card("a", T0, version="aun-card/2"), schema)
+    single("version_aun_card_1", card("a", T0, version="aun-card/1"), schema)
     single("public_key_spare_bits", card("a", T0, public_key=spare_bits_key()), schema)
     single("signature_spare_bits", tampered(a0(), signature=spare_bits_signature(a0())), schema)
     single("february_30", card("a", "2099-02-30T09:00:00+09:00"), schema)
@@ -208,7 +276,7 @@ def build_cases() -> dict[str, dict[str, Any]]:
            raw(a0(), b'"agent_id": "agent-a"', b'"agent_id": "agent-a",\n  "agent_id": "agent-a"'),
            schema)
     single("byte_order_mark", b"\xef\xbb\xbf" + a0(), schema)
-    single("float_value", raw(a0(), b'"aun/0.3"', b"1.0"), schema)
+    single("float_value", raw(a0(), b'"aun/0.4"', b"1.0"), schema)
     single("not_an_object", encode_card([json.loads(a0())]), schema)  # type: ignore[arg-type]
 
     # Order of the checks: each case breaks two, and the earlier one is reported.

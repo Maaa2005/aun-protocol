@@ -111,7 +111,6 @@ def build_session(
             "receiver_node_id": receiver["node_id"],
             "message_type": message_type,
             "intent": intent,
-            "session_version": 1,
             "sequence": seq,
             "payload": payload,
             "delta": delta,

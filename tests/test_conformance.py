@@ -1,4 +1,4 @@
-"""Conformance checks for AUN Protocol 0.3: examples, reference checker, cases.
+"""Conformance checks for AUN Protocol 0.4: examples, reference checker, cases.
 
 Run from the repository root: `pytest -q`.
 """
@@ -10,12 +10,17 @@ import copy
 import json
 import subprocess
 import sys
+import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 import rfc8785
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.asymmetric.ed25519 import (
+    Ed25519PrivateKey,
+    Ed25519PublicKey,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
@@ -104,7 +109,6 @@ class Conversation:
             "receiver_node_id": receiver.node_id,
             "message_type": message_type,
             "intent": "test.case",
-            "session_version": 1,
             "sequence": sequence,
             "payload": payload,
             "delta": delta,
@@ -610,12 +614,12 @@ def test_wrong_key_fails():
     dropped("MESSAGE_SIGNATURE_INVALID", nodes["b"], data, T0)
 
 
-@pytest.mark.parametrize("offset", [-301, 301])
-def test_stale_or_future_message_fails(offset):
+def test_only_the_future_side_has_a_300_second_limit():
     conv = Conversation(make_nodes())
     data = conv.signed("a", "b", "REQUEST", request([AMOUNT]), {"offer": [{"share": 0}]},
                        1, at=T0)
-    dropped("MESSAGE_EXPIRED", conv.nodes["b"], data, T0 + timedelta(seconds=offset))
+    dropped("MESSAGE_EXPIRED", conv.nodes["b"], data, T0 - timedelta(seconds=301))
+    assert conv.nodes["b"].receive(data, T0 + timedelta(seconds=301)) == "accepted"
 
 
 def test_reused_nonce_is_replay():
@@ -650,7 +654,7 @@ def test_cli_check_session_roundtrip(capsys):
     assert "agreed after 3 messages" in capsys.readouterr().out
 
 
-# ---- shared vectors (test-vectors/receiver-v0.3.json) ---------------------
+# ---- shared vectors (test-vectors/receiver-v0.4.json) ---------------------
 #
 # Receiver cases for other implementations, hostile input included. Each case
 # replays through a fresh node B; a drop must leave B's state unchanged.
@@ -697,7 +701,7 @@ def test_every_schema_pattern_is_anchored(path):
 
 # ---- agent cards (SPEC section 11) ------------------------------------------
 #
-# Card cases for other implementations (test-vectors/card-v1.json), the example
+# Card cases for other implementations (test-vectors/card-v2.json), the example
 # cards, and what a stored card does for messages.
 
 CARD_VECTORS = json.loads((ROOT / make_card_vectors.OUTPUT).read_text(encoding="utf-8"))
@@ -741,7 +745,7 @@ def test_card_vectors_cover_every_code_of_section_11_2():
     assert {c for c in codes if c.startswith("CARD_")} == {
         "CARD_TOO_LARGE", "CARD_SCHEMA_INVALID", "CARD_IDENTITY_MISMATCH",
         "CARD_SIGNATURE_INVALID", "CARD_VERSION_UNSUPPORTED", "CARD_NOT_YET_VALID",
-        "CARD_PEER_NOT_TRUSTED", "CARD_STALE"}
+        "CARD_PEER_NOT_TRUSTED", "CARD_STALE", "CARD_KEY_WEAK"}
 
 
 def test_card_schema_defs_equal_the_message_schema_defs():
@@ -894,3 +898,204 @@ def test_issue_card_needs_a_strictly_later_issued_at():
     assert a.last_issued_at == parse_time("2099-01-01T09:00:00+09:00")
     a.issue_card("Node", endpoint, "2099-01-01T09:00:01+09:00")
     assert a.last_issued_at == parse_time("2099-01-01T09:00:01+09:00")
+
+
+# ---- weak keys and signatures (SPEC sections 8 and 11.2) -------------------
+
+
+WEAK_Y = [
+    "01" + "00" * 31,
+    "ec" + "ff" * 30 + "7f",
+    "00" * 32,
+    "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05",
+    "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a",
+]
+
+
+@pytest.mark.parametrize("hex_key", WEAK_Y)
+@pytest.mark.parametrize("sign", [0, 0x80])
+def test_weak_key_can_be_forged_without_a_private_key_and_is_refused(hex_key, sign):
+    """The library accepts a forged signature, which is why the check exists."""
+    raw = bytes.fromhex(hex_key)
+    raw = raw[:31] + bytes([raw[31] | sign])
+    points = [bytes.fromhex(y) for y in WEAK_Y]
+    points += [p[:31] + bytes([p[31] | 0x80]) for p in points]
+    key = Ed25519PublicKey.from_public_bytes(raw)
+
+    def forged(message: bytes) -> bool:
+        for point in points:
+            try:
+                key.verify(point + bytes(32), message)
+                return True
+            except InvalidSignature:
+                pass
+        return False
+
+    assert any(forged(b"message %d" % i) for i in range(40))
+    assert aun_reference.is_weak_point(raw)
+    node = Node("agent-b", Ed25519PrivateKey.from_private_bytes(bytes(32)))
+    with pytest.raises(ValueError):
+        node.trust(Peer("agent-x", base64.b64encode(raw).decode("ascii")))
+
+
+def test_ordinary_keys_are_not_weak():
+    for path in CARD_FILES:
+        raw = base64.b64decode(json.loads(path.read_bytes())["public_key"])
+        assert not aun_reference.is_weak_point(raw)
+
+
+# ---- a drop changes nothing, the clock does (SPEC sections 5.3 and 9) ------
+
+
+def test_a_late_message_drops_without_closing_the_session():
+    conv = open_dinner()
+    late = EXPIRES + timedelta(seconds=301)
+    data = conv.signed("b", "a", "ACCEPT", {},
+                       {"agreed": {"place": "Pasta", "time": slot(19)}}, 2)
+    dropped("SESSION_EXPIRED", conv.nodes["a"], data, late)
+    assert conv.state("a").status == "open"
+    assert conv.state("a").status_at(late) == "expired"
+
+
+# ---- delivery (SPEC section 11.4) ------------------------------------------
+
+
+@pytest.mark.parametrize("method,content_type,size,status", [
+    ("POST", "application/aun+json", 16384, 202),
+    ("POST", "application/aun+json; charset=utf-8", 1, 202),
+    ("POST", "application/aun+json", 16385, 413),
+    ("POST", "application/aun-card+json", 2048, 202),
+    ("POST", "application/aun-card+json", 2049, 413),
+    ("POST", "application/json", 1, 415),
+    ("GET", "application/aun+json", 1, 405),
+])
+def test_inbox_status(method, content_type, size, status):
+    assert aun_reference.inbox_status(method, content_type, size) == status
+
+
+@pytest.mark.parametrize("status,action", [
+    (200, "deposited"), (202, "deposited"), (204, "deposited"),
+    (408, "retry"), (429, "retry"), (500, "retry"), (503, "retry"),
+    (301, "give_up"), (307, "give_up"), (400, "give_up"), (404, "give_up"),
+    (413, "give_up"), (415, "give_up"),
+])
+def test_delivery_action(status, action):
+    assert aun_reference.delivery_action(status) == action
+
+
+@pytest.mark.parametrize("url,usable", [
+    ("https://relay.example/aun/a", True),
+    ("http://relay.example/aun/a", False),
+    ("https://user:secret@relay.example/a", False),
+    ("https://relay.example@evil.example/a", False),
+    ("https://relay.example/a#part", False),
+    ("https:///a", False),
+])
+def test_endpoint_usable(url, usable):
+    assert aun_reference.endpoint_usable(url) is usable
+
+
+@pytest.mark.parametrize("address,usable", [
+    ("8.8.8.8", True),
+    ("2606:4700:4700::1111", True),
+    ("127.0.0.1", False),
+    ("10.0.0.1", False),
+    ("169.254.169.254", False),
+    ("192.168.1.1", False),
+    ("100.64.0.1", False),
+    ("0.0.0.0", False),
+    ("224.0.0.1", False),
+    ("::1", False),
+    ("::", False),
+    ("fe80::1", False),
+    ("fc00::1", False),
+    ("::ffff:127.0.0.1", False),
+    ("::ffff:169.254.169.254", False),
+    ("::7f00:1", False),
+    ("64:ff9b::7f00:1", False),
+    ("2002:7f00:1::", False),
+])
+def test_address_usable(address, usable):
+    assert aun_reference.address_usable(address) is usable
+
+
+# ---- from review: atomic receipt, stateless check, address and endpoint edges
+
+
+def test_two_copies_at_once_give_one_accepted_and_one_duplicate(monkeypatch):
+    """SPEC section 9: steps 7 and 8 and their record are one atomic step."""
+    conv = open_dinner()
+    data = conv.signed("b", "a", "ACCEPT", {},
+                       {"agreed": {"place": "Pasta", "time": slot(19)}}, 2)
+    node = conv.nodes["a"]
+    barrier = threading.Barrier(2)
+    check_turn = Node._check_turn
+
+    def held(self, *args):
+        check_turn(self, *args)
+        try:
+            barrier.wait(timeout=0.5)
+        except threading.BrokenBarrierError:
+            pass
+
+    monkeypatch.setattr(Node, "_check_turn", held)
+    results = []
+    threads = [threading.Thread(target=lambda: results.append(node.receive(data, T0)))
+               for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert sorted(results) == ["accepted", "duplicate"]
+
+
+def test_stateless_check_has_only_the_future_limit():
+    conv = Conversation(make_nodes())
+    envelope = sign_envelope(
+        conv.unsigned("a", "b", "REQUEST", request([AMOUNT]), {"offer": [{"share": 0}]}, 1, at=T0),
+        conv.nodes["a"].private_key)
+    public = conv.nodes["a"].private_key.public_key().public_bytes_raw()
+    aun_reference.verify_envelope(envelope, public, now=T0 + timedelta(days=1))
+    with pytest.raises(VerificationError) as caught:
+        aun_reference.verify_envelope(envelope, public, now=T0 - timedelta(seconds=301))
+    assert caught.value.code == "MESSAGE_EXPIRED"
+
+
+@pytest.mark.parametrize("address", [
+    "100:0:0:1::1",          # discard
+    "2001:db8::1",           # documentation
+    "3fff::1",               # documentation
+    "2001:2::1",             # benchmarking
+    "2001::1",               # Teredo
+    "2002:808:808::1",       # 6to4
+    "5f00::1",               # segment routing
+    "4000::1",               # not allocated for global use
+    "ff02::1",
+    "192.0.2.1",
+    "198.18.0.1",
+    "198.51.100.1",
+    "203.0.113.1",
+    "240.0.0.1",
+    "255.255.255.255",
+    "::ffff:10.0.0.1",
+    "64:ff9b::a00:1",
+])
+def test_address_not_globally_reachable(address):
+    assert aun_reference.address_usable(address) is False
+
+
+@pytest.mark.parametrize("address", [
+    "1.1.1.1", "::ffff:8.8.8.8", "64:ff9b::808:808", "2606:4700:4700::1111",
+    "2a00:1450:4001::1",
+])
+def test_address_globally_reachable(address):
+    assert aun_reference.address_usable(address) is True
+
+
+@pytest.mark.parametrize("url", [
+    "https://relay.example:abc/inbox", "https://[", "https://relay.example:99999/a",
+    "https://relay.example:0/a", "https://relay.example/#", "https://relay.example/a#",
+    "https://good.example" + chr(92) + "@127.0.0.1/",
+])
+def test_endpoint_that_does_not_parse_is_not_usable(url):
+    assert aun_reference.endpoint_usable(url) is False
