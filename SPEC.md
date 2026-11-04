@@ -745,3 +745,74 @@ Not covered by tests: approval (section 7), free text handling (section 9),
 double booking across sessions (section 7), the unknown outcome of an
 unconfirmed `ACCEPT` (section 5.3), the in-person step, durable storage, and
 delivery across a real network. These are local duties a receiver cannot observe.
+
+## 15. Security considerations
+
+This section states what 0.4 gives and what it does not. It adds no rule.
+
+What holds:
+
+- **Authenticity and integrity.** Every message carries an Ed25519 signature
+  (RFC 8032) over the JCS form (RFC 8785) of every field but `signature`
+  (section 8). A receiver that holds the sender's key (section 11) can tell
+  that the message came from that key and was not changed. A card is signed
+  the same way by its own key (section 11.2).
+- **Replay and ordering.** Duplicate, session, turn and deadline checks (sections
+  5 and 9) stop a copy of a valid message from being used again or out of turn,
+  as long as the node keeps its records.
+- **Trust comes from the in-person step.** A signature proves only that the
+  signer holds the key. Who the human behind the key is comes from the
+  in-person exchange of the card (section 11).
+
+What does not hold:
+
+- **No confidentiality.** Messages are signed, not encrypted. The endpoint and
+  every other hop that carries a message can read `topic`, the issue
+  declarations, every offered package, counter-offers and `public_reason`, and
+  can see who talks to whom, when, and how much. TLS (section 11.4) protects only
+  the connection to the endpoint.
+- **"Disclose only approved options" is a rule about what the agent chooses to
+  send** (sections 7 and 10). It is not a property of the encoding. Anything
+  that an agent sends is readable by the endpoint and by the peer.
+- **No delivery guarantee.** An endpoint or network can drop, delay or withhold a
+  message (sections 5.3, 11.3 and 11.4). A `202` is a deposit, not a receipt.
+
+### Known limitations (non-normative)
+
+This list is informative. It does not change any requirement above, and
+nothing here is a promise of a design.
+
+- **Lost records.** A node that loses its sessions and message IDs can accept a
+  copy of a `REQUEST` for about 7 days (section 9).
+- **Mixed-order keys.** A key with a small-order component mixed in is not refused.
+  Its holder can make signatures that some libraries accept and others do not
+  (section 8).
+- **Look-alike text.** Section 2 refuses hidden characters only. Letters that look
+  alike and plain instructions in free text pass it (section 9).
+- **Decimal numbers in the JCS vectors.** `test-vectors/jcs-v0.2.json` contains
+  numbers that are not integers (`4.5`, `0.000001`) although 0.4 allows integers
+  only (section 9, step 2). An implementation that supports only integers cannot
+  reproduce those cases.
+
+## 16. References
+
+Normative:
+
+- RFC 2119, Key words for use in RFCs to Indicate Requirement Levels.
+- RFC 3339, Date and Time on the Internet: Timestamps (section 2).
+- RFC 3986, Uniform Resource Identifier (URI): Generic Syntax (section 11.4).
+- RFC 4648, The Base16, Base32, and Base64 Data Encodings, section 4
+  (section 8).
+- RFC 7493, The I-JSON Message Format (section 9, step 2).
+- RFC 8032, Edwards-Curve Digital Signature Algorithm (EdDSA), for Ed25519
+  (sections 2, 8 and 11).
+- RFC 8785, JSON Canonicalization Scheme (JCS) (section 8).
+- RFC 9110, HTTP Semantics (section 11.4).
+- ECMA-262, ECMAScript Language Specification, for the meaning of patterns
+  (section 2).
+- JSON Schema 2020-12, for the schemas.
+
+Informative:
+
+- RFC 6890, Special-Purpose IP Address Registries (the table of section 11.4).
+- RFC 8264, PRECIS Framework (section 9).

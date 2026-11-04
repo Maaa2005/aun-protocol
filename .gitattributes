@@ -1,0 +1,7 @@
+# Generated files (examples, test vectors) are compared byte for byte by the
+# tests, so they must be checked out with LF on every platform.
+* text=auto eol=lf
+*.json text eol=lf
+# No binary files are tracked today. Add binary types here if any are added,
+# for example:
+# *.png binary
