@@ -1,14 +1,13 @@
 {
-  "protocol": "aun/0.3",
+  "protocol": "aun/0.4",
   "message_id": "90b3391e73a231082311c118dd9df9ff",
   "session_id": "session-meeting-schedule",
   "sender_agent_id": "agent-a",
   "receiver_agent_id": "agent-b",
-  "sender_node_id": "agt_291e1df27cc1f0f9",
-  "receiver_node_id": "agt_ca07afd7b2241f78",
+  "sender_node_id": "agt_291e1df27cc1f0f99f1fc58523e82b64",
+  "receiver_node_id": "agt_ca07afd7b2241f78fdda825ada4376c6",
   "message_type": "REQUEST",
   "intent": "meeting.schedule",
-  "session_version": 1,
   "sequence": 1,
   "payload": {
     "topic": "Project sync",
@@ -50,5 +49,5 @@
   "nonce": "6d4aa4d9a722f3137609bfc07c3872d5",
   "created_at": "2099-01-01T09:00:00+09:00",
   "payload_hash": "38e479a1006a9610924e25a3559119fecebcd47754e3bcba241ef6a45c77e932",
-  "signature": "FkEncTdIlRWO5jggRUailAvxZA39Yd9gT25QOp5Tj5xCLhUaFv4bJ9sQwitxCIB8e6KVnD+963KsBRlPV0/kBQ=="
+  "signature": "u75ChSRt7BEx84LHHiJ+Fpv/AWakoZyJceF6M9cwZ2E/0EFAHh/qzjb9ALFnIAgHhWPbDbpPVFlFJWc6zt3pAw=="
 }

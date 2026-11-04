@@ -1,4 +1,4 @@
-"""Deterministic generator for test-vectors/receiver-v0.3.json (format: FORMAT below).
+"""Deterministic generator for test-vectors/receiver-v0.4.json (format: FORMAT below).
 
 Usage:
   python tools/make_vectors.py           write the file
@@ -9,11 +9,14 @@ from __future__ import annotations
 
 import base64
 import copy
+import hashlib
 import json
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from aun_reference import (  # noqa: E402
@@ -22,13 +25,14 @@ from aun_reference import (  # noqa: E402
     Node,
     Peer,
     VerificationError,
+    canonical,
     encode,
     sign_envelope,
 )
 from make_examples import TEST_ONLY_NOTE, _node  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-OUTPUT = "test-vectors/receiver-v0.3.json"
+OUTPUT = "test-vectors/receiver-v0.4.json"
 
 JST = timezone(timedelta(hours=9))
 UTC = timezone.utc
@@ -38,6 +42,7 @@ EXPIRES = T0 + timedelta(hours=1)
 FAR = datetime(9999, 12, 31, 23, 50, tzinfo=UTC)
 BAD_DATE = "2099-02-29T18:00+09:00"  # 2099 is not a leap year
 MAX_INT = 2**53 - 1
+ORDER = 2**252 + 27742317777372353535851937790883648493
 
 KEYS = {label: _node(label, f"agent-{label}") for label in "abcd"}
 ROLES = {"a": "trusted peer", "b": "receiver", "c": "trusted peer", "d": "not trusted"}
@@ -47,8 +52,8 @@ FORMAT = [
     "receive: B runs the receiver checks on `message` (Base64 of the bytes) at time `now`.",
     "send: B runs the sender checks on its own `message` at time `now` and records it.",
     "`expect` is accepted, duplicate or the code of the drop. A drop changes nothing.",
-    "After the last step, `final` is the status of B's session with A for session_id s1,",
-    "or null when B holds none.",
+    "After the last step, `final` is the status of B's session with A for session_id s1",
+    "at the `now` of that step, or null when B holds none.",
 ]
 
 
@@ -68,7 +73,6 @@ def unsigned(who: str, message_type: str, payload: dict, delta: dict, sequence: 
         "receiver_node_id": receiver["node_id"],
         "message_type": message_type,
         "intent": "test.case",
-        "session_version": 1,
         "sequence": sequence,
         "payload": payload,
         "delta": delta,
@@ -165,6 +169,33 @@ def spare_bits_set(data: bytes) -> bytes:
     return edited(data, signature=signature[:-3] + chr(ord(signature[-3]) + 1) + "==")
 
 
+def with_s_plus_l(data: bytes) -> bytes:
+    """The same signature with S + L: it passes a check that skips S < L."""
+    envelope = json.loads(data)
+    signature = base64.b64decode(envelope["signature"])
+    s = int.from_bytes(signature[32:], "little") + ORDER
+    return edited(data, signature=base64.b64encode(signature[:32] + s.to_bytes(32, "little"))
+                  .decode("ascii"))
+
+
+def with_identity_r(data: bytes) -> bytes:
+    """Sign as A with R = the identity point, which only A can do. S = h * a."""
+    envelope = json.loads(data)
+    del envelope["signature"]
+    seed = KEYS["a"]["private"].private_bytes_raw()
+    scalar = bytearray(hashlib.sha512(seed).digest()[:32])
+    scalar[0] &= 248
+    scalar[31] = (scalar[31] & 127) | 64
+    r = bytes([1]) + bytes(31)
+    public = base64.b64decode(KEYS["a"]["public_key"])
+    h = int.from_bytes(hashlib.sha512(r + public + canonical(envelope)).digest(), "little")
+    s = h * int.from_bytes(scalar, "little") % ORDER
+    signature = r + s.to_bytes(32, "little")
+    Ed25519PublicKey.from_public_bytes(public).verify(signature, canonical(envelope))
+    envelope["signature"] = base64.b64encode(signature).decode("ascii")
+    return encode(envelope)
+
+
 def compact(data: bytes) -> bytes:
     """The same JSON value without whitespace and with `T` of "Test" escaped."""
     text = json.dumps(json.loads(data), separators=(",", ":"), ensure_ascii=False).encode()
@@ -254,11 +285,8 @@ def build_cases() -> dict[str, dict[str, Any]]:
         receive(opening(), "accepted"), send(counter("b", 2, "Pasta", 20)),
         receive(accept("a", 3, pasta20, intent="other.case"), "SESSION_BINDING_MISMATCH"),
     ], "open")
-    cases["session version changed in the session"] = ([
-        receive(opening(), "accepted"), send(counter("b", 2, "Pasta", 20)),
-        receive(accept("a", 3, pasta20, session_version=2), "SESSION_BINDING_MISMATCH"),
-    ], "open")
-    single("session version 7 is fixed for the session", opening(session_version=7), "accepted")
+    cases["session_version is no longer a field"] = ([
+        receive(opening(session_version=1), schema)], None)
 
     # Declarations and packages (sections 4 and 6).
     def offer(*packages: dict, issues: list[dict] = DINNER) -> bytes:
@@ -303,23 +331,58 @@ def build_cases() -> dict[str, dict[str, Any]]:
         receive(opening(), "accepted"), send(counter("b", 2, "Pasta", 20)),
         receive(counter("a", 3, "Sushi", 21), "accepted"),
         send(counter("b", 4, "Pasta", 17, nonce="s1-n2"), replayed)], "open")
-    cases["a copy after the time window"] = ([
+    cases["a copy after 300 seconds is still a duplicate"] = ([
         receive(opening(), "accepted"),
-        receive(opening(), "MESSAGE_EXPIRED", T0 + timedelta(seconds=302))], "open")
+        receive(opening(), "duplicate", T0 + timedelta(seconds=302))], "open")
+
+    # Late delivery and resending (sections 5.3 and 9 step 6).
+    def held(seconds: int) -> datetime:
+        return EXPIRES + timedelta(seconds=seconds)
+
+    def dinner_with_counter() -> list[dict]:
+        return [receive(opening(), "accepted"), send(counter("b", 2, "Pasta", 20))]
+
+    cases["accept resent long after it was created"] = (
+        dinner_with_counter() + [receive(accept("a", 3, pasta20), "accepted", held(0))], "agreed")
+    cases["accept resent 300 seconds after the deadline"] = (
+        dinner_with_counter() + [receive(accept("a", 3, pasta20), "accepted", held(300))], "agreed")
+    cases["accept resent 301 seconds after the deadline"] = (
+        dinner_with_counter() + [receive(accept("a", 3, pasta20), "SESSION_EXPIRED", held(301))],
+        "expired")
+    cases["a copy of the accept after the session closed"] = (
+        dinner_with_counter() + [receive(accept("a", 3, pasta20), "accepted"),
+                                 receive(accept("a", 3, pasta20), "duplicate", held(300))],
+        "agreed")
+    cases["a copy of a counter after the session closed"] = ([
+        receive(opening(), "accepted"), send(counter("b", 2, "Pasta", 20)),
+        receive(counter("a", 3, "Sushi", 21), "accepted"),
+        send(accept("b", 4, {"place": "Sushi", "time": slot(21)})),
+        receive(counter("a", 3, "Sushi", 21), "duplicate", held(0))], "agreed")
+    cases["created too long before the request"] = (
+        dinner_with_counter() + [receive(
+            accept("a", 3, pasta20, created_at=(T0 - timedelta(seconds=300)).isoformat()),
+            "MESSAGE_EXPIRED")], "open")
+    cases["created 299 seconds before the request"] = (
+        dinner_with_counter() + [receive(
+            accept("a", 3, pasta20, created_at=(T0 - timedelta(seconds=298)).isoformat()),
+            "accepted")], "agreed")
+    single("request delivered 300 seconds after the deadline", opening(), "accepted", held(300))
+    single("request delivered 301 seconds after the deadline", opening(), "SESSION_EXPIRED",
+           held(301))
 
     # Limits and order of the checks (section 9).
     single("16384 bytes", padded(MAX_BYTES), "accepted")
     single("16385 bytes", padded(MAX_BYTES + 1), "MESSAGE_TOO_LARGE")
+    single("created 301 seconds before now",
+           opening(created_at=(NOW - timedelta(seconds=301)).isoformat()), "accepted")
     for seconds, expect in ((300, "accepted"), (301, "MESSAGE_EXPIRED")):
-        single(f"created {seconds} seconds before now",
-               opening(created_at=(NOW - timedelta(seconds=seconds)).isoformat()), expect)
         single(f"created {seconds} seconds after now",
                opening(created_at=(NOW + timedelta(seconds=seconds)).isoformat()), expect)
     untrusted = signed("d", "REQUEST", request(), FIRST_OFFER, 1)
     single("untrusted node with a bad signature", bad_signature(untrusted), "PEER_NOT_TRUSTED")
     single("untrusted node with an unknown field", edited(untrusted, extra=1), schema)
-    single("bad signature, created an hour ago",
-           edited(opening(created_at=(T0 - timedelta(hours=1)).isoformat()),
+    single("bad signature, created an hour ahead",
+           edited(opening(created_at=(T0 + timedelta(hours=1)).isoformat()),
                   payload=dict(request(), topic="Changed")),
            "MESSAGE_SIGNATURE_INVALID")
     single("addressed to another node", signed("a", "REQUEST", request(), FIRST_OFFER, 1, to="c"),
@@ -336,11 +399,9 @@ def build_cases() -> dict[str, dict[str, Any]]:
     single("invalid UTF-8", b'{"a": "\xc3\x28"}', schema)
     single("byte order mark", b"\xef\xbb\xbf" + opening(), schema)
     single("lone surrogate", raw(b'"topic": "Test"', b'"topic": "\\ud800"'), schema)
-    single("5000-digit integer",
-           raw(b'"session_version": 1', b'"session_version": 1' + b"0" * 4999), schema)
-    single("integer 2^53", raw(b'"session_version": 1', b'"session_version": 9007199254740992'),
-           schema)
-    single("exponent", raw(b'"session_version": 1', b'"session_version": 1E0'), schema)
+    single("5000-digit integer", raw(b'"sequence": 1', b'"sequence": 1' + b"0" * 4999), schema)
+    single("integer 2^53", raw(b'"sequence": 1', b'"sequence": 9007199254740992'), schema)
+    single("exponent", raw(b'"sequence": 1', b'"sequence": 1E0'), schema)
     single("nesting 3000 levels", b"[" * 3000 + b"]" * 3000, schema)
     single("oversized field", raw(b'"topic": "Test"', b'"topic": "' + b" " * MAX_BYTES + b'"'),
            "MESSAGE_TOO_LARGE")
@@ -354,7 +415,7 @@ def build_cases() -> dict[str, dict[str, Any]]:
     single("offset +24:00", opening(created_at="2099-01-01T09:00:00+24:00"), schema)
     single("year 0001 at +23:59", opening(created_at="0001-01-01T00:00:00+23:59"), schema)
     single("year 9999 at -23:59", opening(created_at="9999-12-31T23:59:00-23:59"), schema)
-    single("year 0001 in UTC", opening(created_at="0001-01-01T00:00:00Z"), "MESSAGE_EXPIRED")
+    single("year 0001 in UTC", opening(created_at="0001-01-01T00:00:00Z"), payload)
     single("offset -00:00 is UTC", opening(created_at="2099-01-01T00:00:01-00:00"), "accepted")
     single("no such date in expires_at", time_request(expires_at=BAD_DATE), schema)
     single("no such date in a window", time_request(window_start=BAD_DATE), schema)
@@ -369,6 +430,41 @@ def build_cases() -> dict[str, dict[str, Any]]:
         "a", "REQUEST", request([TIME]), {"offer": [{"time": slot(18)}, {"time": slot(18, tz=UTC)}]},
         1), payload)
     single("signature with spare bits set", spare_bits_set(opening()), schema)
+
+    # Signatures only the key's holder can make (section 8).
+    bad_sig = "MESSAGE_SIGNATURE_INVALID"
+    single("signature with S above the group order", with_s_plus_l(opening()), bad_sig)
+    single("signature with a small-order R", with_identity_r(opening()), bad_sig)
+
+    # Characters (section 2).
+    def topic(text: str) -> bytes:
+        return opening(payload=dict(request(), topic=text))
+
+    for name, text in (("newline", "a\nb"), ("NUL", "a\x00b"), ("delete", "a\x7fb"),
+                       ("C1 control", "a\x85b"), ("soft hyphen", "a\xadb"),
+                       ("zero width space", "a\u200bb"), ("right-to-left mark", "a\u200fb"),
+                       ("line separator", "a\u2028b"), ("override", "a\u202eb"),
+                       ("isolate", "a\u2066b"), ("word joiner", "a\u2060b"),
+                       ("Hangul filler", "a\u3164b"), ("byte order mark", "a\ufeffb"),
+                       ("noncharacter", "a\ufffeb"), ("noncharacter in a high plane", "a\U0001ffffb"),
+                       ("tag character", "a\U000e0041b"), ("supplement selector", "a\U000e0100b")):
+        single(f"topic with {name}", topic(text), schema)
+    for name, text in (("joiner", "\U0001f468\u200d\U0001f373"), ("non-joiner", "\u0645\u06cc\u200c\u062e"),
+                       ("emoji selector", "\u2764\ufe0f"), ("Mongolian selector", "\u1820\u180b"),
+                       ("Japanese", "金曜の夕食"), ("private use", "\ue000")):
+        single(f"topic with {name} is fine", topic(text), "accepted")
+    single("unit with an override", amount_request(dict(AMOUNT, unit="J\u202eY"), {"share": 0}), schema)
+    single("option with a tag", signed("a", "REQUEST", request([
+        {"name": "place", "kind": "choice", "options": ["a\U000e0041"]}]),
+        {"offer": [{"place": "a\U000e0041"}]}, 1), schema)
+    single("open choice value with a newline", signed("a", "REQUEST", request([
+        {"name": "place", "kind": "choice"}]), {"offer": [{"place": "a\nb"}]}, 1), schema)
+    single("message ID not ASCII", opening(message_id="メッセージ"), schema)
+    single("session ID with a space", opening(session_id="s 1"), schema)
+    single("nonce with a newline", opening(nonce="n1\n"), schema)
+    single("agent ID with an override", opening(sender_agent_id="agent\u202ea"), schema)
+    single("ID with every allowed kind of character", opening(message_id="aZ0._~:-"), "accepted")
+    single("session ID of 129 characters", opening(session_id="s" * 129), schema)
 
     return {name: {"steps": steps, "final": final} for name, (steps, final) in cases.items()}
 
@@ -403,6 +499,7 @@ def run_case(case: dict[str, Any]) -> tuple[list[str], str | None]:
     """Each step's result through a fresh reference node B, and the final status."""
     node = fresh_receiver()
     results = []
+    now = NOW
     for step in case["steps"]:
         data = base64.b64decode(step["message"])
         now = datetime.fromisoformat(step["now"])
@@ -419,7 +516,7 @@ def run_case(case: dict[str, Any]) -> tuple[list[str], str | None]:
             changed = (node.sessions, node.seen, node.nonces) != before
             results.append(exc.code + (" (state changed)" if changed else ""))
     session = node.sessions.get((KEYS["a"]["node_id"], "s1"))
-    return results, session.status if session else None
+    return results, session.status_at(now) if session else None
 
 
 def check(path: Path) -> int:

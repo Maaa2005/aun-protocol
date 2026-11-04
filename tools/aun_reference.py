@@ -1,8 +1,8 @@
-"""Reference checker for AUN Protocol 0.3.
+"""Reference checker for AUN Protocol 0.4.
 
 Implements SPEC.md: signing (section 8), the receiver checks in order
 (section 9), session state (section 5), the package rules (section 6) and the
-agent card checks (section 11.2).
+agent card checks (section 11.2), and the delivery rules of section 11.4.
 It knows the four issue kinds and nothing about any domain: no intent name
 appears in this file.
 
@@ -19,13 +19,16 @@ import argparse
 import base64
 import binascii
 import hashlib
+import ipaddress
 import json
 import re
 import sys
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import rfc8785
 from cryptography.exceptions import InvalidSignature
@@ -36,7 +39,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
 from jsonschema import Draft202012Validator, validators
 from jsonschema.exceptions import ValidationError
 
-PROTOCOL = "aun/0.3"
+PROTOCOL = "aun/0.4"
 MAX_BYTES = 16384
 MAX_DEPTH = 8
 WINDOW_SECONDS = 300
@@ -44,13 +47,36 @@ MAX_COUNTERS = 3
 MAX_SESSION_DAYS = 7
 MAX_WINDOW_DAYS = 31
 MAX_INT = 2**53 - 1
-CARD_VERSION = "aun-card/1"
+CARD_VERSION = "aun-card/2"
 CARD_MAX_BYTES = 2048
 SCHEMA_PATH = (
     Path(__file__).resolve().parents[1] / "schemas" / "negotiation-message.schema.json"
 )
 CARD_SCHEMA_PATH = (
     Path(__file__).resolve().parents[1] / "schemas" / "agent-card.schema.json"
+)
+
+# SPEC section 8: Ed25519 field prime, group order and the y of small-order points.
+_P = 2**255 - 19
+_L = 2**252 + 27742317777372353535851937790883648493
+_SMALL_ORDER_Y = frozenset({
+    0,
+    1,
+    _P - 1,
+    int.from_bytes(bytes.fromhex(
+        "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05"), "little"),
+    int.from_bytes(bytes.fromhex(
+        "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a"), "little"),
+})
+
+# SPEC section 2: code points refused in free text. Fixed numbers, so the table
+# does not move with the Unicode version.
+_REFUSED_IN_TEXT = (
+    (0x0000, 0x001F), (0x007F, 0x009F), (0x00AD, 0x00AD), (0x034F, 0x034F),
+    (0x061C, 0x061C), (0x115F, 0x1160), (0x17B4, 0x17B5), (0x180E, 0x180E),
+    (0x200B, 0x200B), (0x200E, 0x200F), (0x2028, 0x202E), (0x2060, 0x206F),
+    (0x3164, 0x3164), (0xFDD0, 0xFDEF), (0xFEFF, 0xFEFF), (0xFFA0, 0xFFA0),
+    (0xFFF0, 0xFFFB), (0x1BCA0, 0x1BCA3), (0x1D173, 0x1D17A), (0xE0000, 0xE0FFF),
 )
 
 _DATE_TIME = re.compile(
@@ -76,10 +102,10 @@ def canonical(obj: Any) -> bytes:
 
 
 def node_id_from_public_key(raw32: bytes) -> str:
-    """SPEC section 2: `agt_` + first 16 hex chars of SHA-256 of the raw key."""
+    """SPEC section 2: `agt_` + first 32 hex chars of SHA-256 of the raw key."""
     if len(raw32) != 32:
         raise ValueError("public key must be 32 raw bytes")
-    return "agt_" + hashlib.sha256(raw32).hexdigest()[:16]
+    return "agt_" + hashlib.sha256(raw32).hexdigest()[:32]
 
 
 def b64decode_strict(text: str, length: int) -> bytes:
@@ -93,6 +119,35 @@ def b64decode_strict(text: str, length: int) -> bytes:
     if len(raw) != length or base64.b64encode(raw).decode("ascii") != text:
         raise ValueError(f"not the canonical base64 of {length} bytes")
     return raw
+
+
+def is_weak_point(raw32: bytes) -> bool:
+    """SPEC section 8: not canonical, or the y of a small-order point.
+
+    The sign bit is ignored, so both spellings of each point are covered.
+    """
+    y = int.from_bytes(raw32, "little") & ((1 << 255) - 1)
+    return y >= _P or y in _SMALL_ORDER_Y
+
+
+def verify_ed25519(raw_key: bytes, signature: bytes, signed: bytes) -> None:
+    """SPEC section 8: refuse a weak R or an S out of range, then RFC 8032.
+
+    Raises InvalidSignature. Libraries differ on R and on S, so both are
+    checked here and every implementation gives the same answer for them.
+    """
+    if is_weak_point(signature[:32]) or int.from_bytes(signature[32:], "little") >= _L:
+        raise InvalidSignature
+    Ed25519PublicKey.from_public_bytes(raw_key).verify(signature, signed)
+
+
+def text_is_clean(text: str) -> bool:
+    """SPEC section 2: free text holds no code point of the refused table."""
+    for char in text:
+        code = ord(char)
+        if code & 0xFFFE == 0xFFFE or any(lo <= code <= hi for lo, hi in _REFUSED_IN_TEXT):
+            return False
+    return True
 
 
 def compute_payload_hash(payload: dict[str, Any], delta: dict[str, Any]) -> str:
@@ -286,8 +341,21 @@ def _date_times(envelope: dict[str, Any]) -> list[str]:
     return found
 
 
+def _free_text(envelope: dict[str, Any]) -> Iterator[str]:
+    """Every free text in a message that already matches the schema (SPEC section 2)."""
+    payload, delta = envelope["payload"], envelope["delta"]
+    if envelope["message_type"] == "REQUEST":
+        yield payload["topic"]
+        for issue in payload["issues"]:
+            yield from issue.get("options", [])
+            if "unit" in issue:
+                yield issue["unit"]
+    packages = delta.get("offer", []) + ([delta["agreed"]] if "agreed" in delta else [])
+    yield from (v for p in packages for v in p.values() if isinstance(v, str))
+
+
 def validate_schema(envelope: dict[str, Any]) -> None:
-    """SPEC section 9 step 3: the schema, then every date-time is a real instant."""
+    """SPEC section 9 step 3: the schema, real date-times and clean free text."""
     errors = sorted(_validator().iter_errors(envelope), key=lambda e: list(e.path))
     if errors:
         first = errors[0]
@@ -298,6 +366,8 @@ def validate_schema(envelope: dict[str, Any]) -> None:
             parse_time(text)
     except ValueError as exc:
         raise VerificationError("MESSAGE_SCHEMA_INVALID", str(exc)) from exc
+    if not all(text_is_clean(text) for text in _free_text(envelope)):
+        raise VerificationError("MESSAGE_SCHEMA_INVALID", "refused code point in free text")
 
 
 def verify_signature(envelope: dict[str, Any], public_key: str | bytes) -> None:
@@ -308,10 +378,9 @@ def verify_signature(envelope: dict[str, Any], public_key: str | bytes) -> None:
             if isinstance(public_key, bytes)
             else b64decode_strict(public_key, 32)
         )
-        key = Ed25519PublicKey.from_public_bytes(raw_key)
         signature = b64decode_strict(envelope["signature"], 64)
         signed = {k: v for k, v in envelope.items() if k != "signature"}
-        key.verify(signature, canonical(signed))
+        verify_ed25519(raw_key, signature, canonical(signed))
     except (InvalidSignature, ValueError, TypeError, binascii.Error,
             rfc8785.CanonicalizationError) as exc:
         raise VerificationError(
@@ -460,9 +529,9 @@ def _card_error(code: str, exc: VerificationError) -> VerificationError:
 
 
 def verify_card(data: bytes, now: datetime) -> dict[str, Any]:
-    """SPEC section 11.2 steps 1 to 7, in order. Returns the parsed card.
+    """SPEC section 11.2 steps 1 to 8, in order. Returns the parsed card.
 
-    Step 8 needs the stored cards and is `Node.accept_card`.
+    Step 9 needs the stored cards and is `Node.accept_card`.
     """
     if len(data) > CARD_MAX_BYTES:
         raise VerificationError("CARD_TOO_LARGE", f"{len(data)} bytes")
@@ -479,6 +548,8 @@ def verify_card(data: bytes, now: datetime) -> dict[str, Any]:
         issued_at = parse_time(card["issued_at"])
     except ValueError as exc:
         raise VerificationError("CARD_SCHEMA_INVALID", str(exc)) from exc
+    if not text_is_clean(card["display_name"]):
+        raise VerificationError("CARD_SCHEMA_INVALID", "refused code point in display_name")
 
     try:
         raw_key = b64decode_strict(card["public_key"], 32)
@@ -488,11 +559,13 @@ def verify_card(data: bytes, now: datetime) -> dict[str, Any]:
     if card["node_id"] != derived:
         raise VerificationError("CARD_IDENTITY_MISMATCH", f"node_id is not {derived}")
 
+    if is_weak_point(raw_key):
+        raise VerificationError("CARD_KEY_WEAK", "small-order or non-canonical public key")
+
     try:
-        key = Ed25519PublicKey.from_public_bytes(raw_key)
         signature = b64decode_strict(card["signature"], 64)
         signed = {k: v for k, v in card.items() if k != "signature"}
-        key.verify(signature, canonical(signed))
+        verify_ed25519(raw_key, signature, canonical(signed))
     except (InvalidSignature, ValueError, TypeError, binascii.Error,
             rfc8785.CanonicalizationError) as exc:
         raise VerificationError("CARD_SIGNATURE_INVALID", "signature does not verify") from exc
@@ -512,7 +585,7 @@ def make_card(
     protocol_versions: tuple[str, ...] | list[str] = (PROTOCOL,),
     now: datetime | None = None,
 ) -> bytes:
-    """Sign a card and run steps 1 to 7 on it, so a sender never hands out a bad one."""
+    """Sign a card and run steps 1 to 8 on it, so a sender never hands out a bad one."""
     raw = private_key.public_key().public_bytes_raw()
     card = sign_card({
         "version": CARD_VERSION,
@@ -542,7 +615,7 @@ class Party:
 class Session:
     session_id: str
     intent: str
-    session_version: int
+    created_at: datetime
     initiator: Party
     responder: Party
     expires_at: datetime
@@ -558,12 +631,17 @@ class Session:
     def other(self, party: Party) -> Party:
         return self.responder if party == self.initiator else self.initiator
 
-    def expire_if_due(self, now: datetime) -> str:
+    def status_at(self, now: datetime) -> str:
         """SPEC section 5.3: an open session ends 300 s after `expires_at`."""
         if self.status == "open" and now - timedelta(seconds=WINDOW_SECONDS) > (
             self.expires_at
         ):
-            self.status = "expired"
+            return "expired"
+        return self.status
+
+    def expire_if_due(self, now: datetime) -> str:
+        """Record the passage of time. A dropped message never does this."""
+        self.status = self.status_at(now)
         return self.status
 
 
@@ -611,12 +689,15 @@ class Node:
         return Party(self.agent_id, self.node_id)
 
     def trust(self, peer: Peer) -> None:
+        """Register a key out of band. SPEC section 11.2: never a weak key."""
+        if is_weak_point(b64decode_strict(peer.public_key, 32)):
+            raise ValueError("small-order or non-canonical public key")
         self.trusted[peer.node_id] = peer
 
     # -- cards (SPEC section 11.2) ----------------------------------------
 
     def accept_card(self, data: bytes, now: datetime, in_person: bool = False) -> str:
-        """Run SPEC section 11.2 steps 1 to 8. Returns "trusted" or "updated".
+        """Run SPEC section 11.2 steps 1 to 9. Returns "trusted" or "updated".
 
         Raises VerificationError when the card is refused. A refusal changes
         nothing. A peer registered with `trust()` and no card counts as the
@@ -689,9 +770,9 @@ class Node:
 
         verify_signature(envelope, peer.public_key)
 
-        age = abs((now - parse_time(envelope["created_at"])).total_seconds())
-        if age > WINDOW_SECONDS:
-            raise VerificationError("MESSAGE_EXPIRED", f"created_at is {age:.0f}s away")
+        ahead = (parse_time(envelope["created_at"]) - now).total_seconds()
+        if ahead > WINDOW_SECONDS:
+            raise VerificationError("MESSAGE_EXPIRED", f"created_at is {ahead:.0f}s ahead")
 
         if self._is_duplicate(envelope):
             return "duplicate"
@@ -751,13 +832,15 @@ class Node:
         if message_type == "REQUEST":
             if session is not None:
                 raise VerificationError("MESSAGE_REPLAYED", "sequence 1 already recorded")
-            session = self._open(envelope, sender, receiver, created_at)
+            session = self._open(envelope, sender, receiver, created_at, now)
         else:
             if session is None:
                 raise VerificationError("INVALID_STATE_TRANSITION", "unknown session")
             self._check_turn(session, envelope, sender, receiver, now)
             if created_at > session.expires_at:
                 raise VerificationError("SESSION_EXPIRED", "created after expires_at")
+            if created_at < session.created_at - timedelta(seconds=WINDOW_SECONDS):
+                raise VerificationError("MESSAGE_EXPIRED", "created before the session")
             self._check_and_advance(session, envelope)
 
         self.seen[(sender.node_id, envelope["message_id"])] = canonical(envelope)
@@ -766,7 +849,7 @@ class Node:
 
     def _open(
         self, envelope: dict[str, Any], sender: Party, receiver: Party,
-        created_at: datetime,
+        created_at: datetime, now: datetime,
     ) -> Session:
         payload = envelope["payload"]
         try:
@@ -775,6 +858,8 @@ class Node:
             raise _bad(str(exc)) from exc
         if not timedelta(0) < expires_at - created_at <= timedelta(days=MAX_SESSION_DAYS):
             raise _bad(f"expires_at must be after created_at and within {MAX_SESSION_DAYS} days")
+        if now - timedelta(seconds=WINDOW_SECONDS) > expires_at:
+            raise VerificationError("SESSION_EXPIRED", "received after the deadline")
         issues = payload["issues"]
         validate_issues(issues)
         offer = envelope["delta"]["offer"]
@@ -782,7 +867,7 @@ class Node:
         return Session(
             session_id=envelope["session_id"],
             intent=envelope["intent"],
-            session_version=envelope["session_version"],
+            created_at=created_at,
             initiator=sender,
             responder=receiver,
             expires_at=expires_at,
@@ -795,19 +880,18 @@ class Node:
         self, session: Session, envelope: dict[str, Any], sender: Party,
         receiver: Party, now: datetime,
     ) -> None:
-        if envelope["intent"] != session.intent or (
-            envelope["session_version"] != session.session_version
-        ):
-            raise VerificationError("SESSION_BINDING_MISMATCH", "intent or version differs")
+        if envelope["intent"] != session.intent:
+            raise VerificationError("SESSION_BINDING_MISMATCH", "intent differs")
         parties = {session.initiator, session.responder}
         if sender not in parties or receiver != session.other(sender):
             raise VerificationError("SESSION_BINDING_MISMATCH", "not the session's parties")
         if envelope["sequence"] <= session.sequence:
             raise VerificationError("MESSAGE_REPLAYED", "sequence already recorded")
-        if session.expire_if_due(now) != "open":
+        status = session.status_at(now)
+        if status != "open":
             raise VerificationError(
-                "SESSION_EXPIRED" if session.status == "expired" else "INVALID_STATE_TRANSITION",
-                f"session is {session.status}",
+                "SESSION_EXPIRED" if status == "expired" else "INVALID_STATE_TRANSITION",
+                f"session is {status}",
             )
         if envelope["sequence"] != session.sequence + 1:
             raise VerificationError("INVALID_STATE_TRANSITION", "sequence skips")
@@ -838,6 +922,50 @@ class Node:
             session.status, session.final_code = "not_supported", delta["code"]
         session.sequence = envelope["sequence"]
         session.last_sender = _party(envelope, "sender")
+
+
+# ---- delivery (SPEC section 11.4) -------------------------------------------
+
+
+_NAT64 = ipaddress.ip_network("64:ff9b::/96")
+MEDIA_TYPES = {"application/aun+json": MAX_BYTES, "application/aun-card+json": CARD_MAX_BYTES}
+
+
+def inbox_status(method: str, content_type: str, size: int) -> int:
+    """The status an endpoint answers. It never looks at the checks of section 9."""
+    if method != "POST":
+        return 405
+    limit = MEDIA_TYPES.get(content_type.split(";")[0].strip().lower())
+    if limit is None:
+        return 415
+    return 413 if size > limit else 202
+
+
+def delivery_action(status: int) -> str:
+    """What a sender does next: "deposited", "retry" or "give_up"."""
+    if 200 <= status < 300:
+        return "deposited"
+    return "retry" if status in (408, 429) or 500 <= status < 600 else "give_up"
+
+
+def endpoint_usable(url: str) -> bool:
+    """https, with a host and without user information or a fragment."""
+    parts = urlsplit(url)
+    return (parts.scheme == "https" and bool(parts.hostname) and parts.username is None
+            and parts.password is None and not parts.fragment)
+
+
+def address_usable(address: str) -> bool:
+    """Whether a sender may connect to this resolved address.
+
+    An IPv4 address inside IPv6 is judged as IPv4, so it cannot hide a private one.
+    """
+    ip = ipaddress.ip_address(address)
+    if ip.version == 6:
+        ip = ip.ipv4_mapped or ip.sixtofour or ip.teredo and ip.teredo[1] or ip
+        if ip.version == 6 and (int(ip) >> 32 == 0 or ip in _NAT64):  # IPv4-compatible, ::
+            ip = ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
+    return ip.is_global and not ip.is_multicast
 
 
 # ---- CLI -------------------------------------------------------------------
@@ -878,18 +1006,18 @@ def check_session(directory: Path, keys: dict[str, dict[str, str]],
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="AUN Protocol 0.3 reference checker")
+    parser = argparse.ArgumentParser(description="AUN Protocol 0.4 reference checker")
     sub = parser.add_subparsers(dest="command", required=True)
     verify = sub.add_parser("verify", help="verify one envelope file")
     verify.add_argument("envelope", type=Path)
     verify.add_argument("--public-key", required=True, help="Base64 raw Ed25519 key")
     verify.add_argument("--no-time-check", action="store_true",
-                        help="skip the 300 second window")
+                        help="skip the 300 second check")
     replay = sub.add_parser("check-session", help="replay one session directory")
     replay.add_argument("directory", type=Path)
     replay.add_argument("--keys", required=True, type=Path,
                         help="keys file with seeds (test keys only)")
-    card = sub.add_parser("verify-card", help="run card checks 1 to 7 on one card file")
+    card = sub.add_parser("verify-card", help="run card checks 1 to 8 on one card file")
     card.add_argument("card", type=Path)
     card.add_argument("--now", help="date-time of the clock (default: now, UTC)")
     args = parser.parse_args(argv)

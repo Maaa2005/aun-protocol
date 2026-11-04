@@ -1,6 +1,6 @@
 # Design note: AUN 0.3, agreement on any terms
 
-Status: revised after review. 0.2 is frozen at tag `v0.2.0`.
+Status: history. 0.3 was replaced by 0.4 ([design-0.4.md](design-0.4.md)).
 
 ## Goal
 
