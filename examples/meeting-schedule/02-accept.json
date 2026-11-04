@@ -1,14 +1,13 @@
 {
-  "protocol": "aun/0.3",
+  "protocol": "aun/0.4",
   "message_id": "dd809eb81d637c2ef2e93356d808578a",
   "session_id": "session-meeting-schedule",
   "sender_agent_id": "agent-b",
   "receiver_agent_id": "agent-a",
-  "sender_node_id": "agt_ca07afd7b2241f78",
-  "receiver_node_id": "agt_291e1df27cc1f0f9",
+  "sender_node_id": "agt_ca07afd7b2241f78fdda825ada4376c6",
+  "receiver_node_id": "agt_291e1df27cc1f0f99f1fc58523e82b64",
   "message_type": "ACCEPT",
   "intent": "meeting.schedule",
-  "session_version": 1,
   "sequence": 2,
   "payload": {},
   "delta": {
@@ -22,5 +21,5 @@
   "nonce": "c85113c3fa101d1f485486744ff9a028",
   "created_at": "2099-01-01T09:00:10+09:00",
   "payload_hash": "02238f6a1f8cd8c14208e2340b0312cd17c8a3806697fa333218b4c57f991b2a",
-  "signature": "Mu/n3xQRKLxsiLFj3JIdXkuVW0jPtonbeqsHzd1n1hqMg5A51zeanTBtvaIDnY277Aa3OtI9z5CzQIslFy5QAA=="
+  "signature": "Gq2CrTnu8P+bJACUwMO4wC59nSbU4yBDrsuQRPdUdUMYQuJQ7KH5a3rLDg9KB8Pf8p7qJCEwn5WfEEsMZqB4BQ=="
 }

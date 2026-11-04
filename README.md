@@ -7,21 +7,24 @@ words. When the first offer suits the other side, agreement takes 2 messages.
 Each agent discloses only the options its human approved, and the human keeps
 the final say.
 
-- Specification: [SPEC.md](SPEC.md) (version `aun/0.3`)
+- Specification: [SPEC.md](SPEC.md) (version `aun/0.4`)
 - JSON Schemas: [messages](schemas/negotiation-message.schema.json) and
   [agent cards](schemas/agent-card.schema.json)
-- Reference checker: [tools/aun_reference.py](tools/aun_reference.py)
+- Reference checker: [tools/aun_reference.py](tools/aun_reference.py), and
+  delivery over HTTP: [tools/aun_http.py](tools/aun_http.py)
 - Canonicalization (RFC 8785) test vectors: [test-vectors/jcs-v0.2.json](test-vectors/jcs-v0.2.json)
-- Receiver test vectors for any language: [test-vectors/receiver-v0.3.json](test-vectors/receiver-v0.3.json) (format in SPEC section 14)
-- Agent card test vectors: [test-vectors/card-v1.json](test-vectors/card-v1.json) (format in SPEC section 14)
-- Design note for 0.3: [docs/design-0.3.md](docs/design-0.3.md)
+- Receiver test vectors for any language: [test-vectors/receiver-v0.4.json](test-vectors/receiver-v0.4.json) (format in SPEC section 14)
+- Agent card test vectors: [test-vectors/card-v2.json](test-vectors/card-v2.json) (format in SPEC section 14)
+- Design notes: [0.4](docs/design-0.4.md) and [0.3](docs/design-0.3.md)
 
 A request declares the terms as a list of issues of four kinds (`choice`,
 `time`, `amount`, `flag`). A new kind of agreement is a new list of issues, not
 new code. The examples include meetings, cost shares, a dinner plan, a favour
 and a shared gift, all checked by the same code.
 
-The 0.2 specification is frozen at tag
+The 0.3 specification is frozen at tag
+[`v0.3.0`](https://github.com/Maaa2005/aun-protocol/tree/v0.3.0) and the 0.2
+specification at tag
 [`v0.2.0`](https://github.com/Maaa2005/aun-protocol/tree/v0.2.0).
 
 ## Quick start

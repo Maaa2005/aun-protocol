@@ -1,14 +1,13 @@
 {
-  "protocol": "aun/0.3",
+  "protocol": "aun/0.4",
   "message_id": "be2cb28630086158bb91841b8bf9b6d2",
   "session_id": "session-cost-split-rejected",
   "sender_agent_id": "agent-a",
   "receiver_agent_id": "agent-b",
-  "sender_node_id": "agt_291e1df27cc1f0f9",
-  "receiver_node_id": "agt_ca07afd7b2241f78",
+  "sender_node_id": "agt_291e1df27cc1f0f99f1fc58523e82b64",
+  "receiver_node_id": "agt_ca07afd7b2241f78fdda825ada4376c6",
   "message_type": "REQUEST",
   "intent": "cost.split",
-  "session_version": 1,
   "sequence": 1,
   "payload": {
     "topic": "Team dinner, total 10000 JPY",
@@ -35,5 +34,5 @@
   "nonce": "941236a1c74bb8c88c06b97bc471d60c",
   "created_at": "2099-01-01T09:00:00+09:00",
   "payload_hash": "29645e50b6459d89efd26a2507891cf37110dd6e87cddcb54e78c11e5010eae6",
-  "signature": "WCCkVDfF0USgMwhM2gSdxGEfMs3s836t7kaACsFWfKYWotfw7itYy4Us04Pf7hufDqM39+JHjfjcpMy/jZu7CA=="
+  "signature": "BHDPfdU69JUpXmYgCb+aJyL3e2uzzDbXVGS42MsyUatIALT8/qvGxqssZzDT+KISaVGAPGkC9rtFfL5DF5C6Dg=="
 }

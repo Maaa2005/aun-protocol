@@ -1,14 +1,13 @@
 {
-  "protocol": "aun/0.3",
+  "protocol": "aun/0.4",
   "message_id": "42750f27d8773c286ed4c846df1e6ab5",
   "session_id": "session-favor-ask",
   "sender_agent_id": "agent-b",
   "receiver_agent_id": "agent-a",
-  "sender_node_id": "agt_ca07afd7b2241f78",
-  "receiver_node_id": "agt_291e1df27cc1f0f9",
+  "sender_node_id": "agt_ca07afd7b2241f78fdda825ada4376c6",
+  "receiver_node_id": "agt_291e1df27cc1f0f99f1fc58523e82b64",
   "message_type": "ACCEPT",
   "intent": "favor.ask",
-  "session_version": 1,
   "sequence": 2,
   "payload": {},
   "delta": {
@@ -20,5 +19,5 @@
   "nonce": "e06d9dde73c4783656d56ae953408659",
   "created_at": "2099-01-01T09:00:10+09:00",
   "payload_hash": "c81c769776d67c740c410779c80fc10710e283c1492cd26d5dc9ec43175e5c31",
-  "signature": "1Nj4rxqhGN3QzoDoNKIYfxX2/7BWF43rwZa+LQzFhkBEyKqHv3z6+y7Rcok73asdDJ6sfzORlQL9ysEaKTvmCA=="
+  "signature": "wFiRBHeGUC2ZWNQCr+C38D8WaBRbzAi2GFWSx6Vhrka9QAdfGwf5LogFAHdcuKsCZdZfoo14l1kUBWzWTGa4Aw=="
 }
