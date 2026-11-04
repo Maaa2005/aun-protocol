@@ -10,7 +10,8 @@ the final say.
 - Specification: [SPEC.md](SPEC.md) (version `aun/0.4`)
 - JSON Schemas: [messages](schemas/negotiation-message.schema.json) and
   [agent cards](schemas/agent-card.schema.json)
-- Reference checker: [tools/aun_reference.py](tools/aun_reference.py)
+- Reference checker: [tools/aun_reference.py](tools/aun_reference.py), and
+  delivery over HTTP: [tools/aun_http.py](tools/aun_http.py)
 - Canonicalization (RFC 8785) test vectors: [test-vectors/jcs-v0.2.json](test-vectors/jcs-v0.2.json)
 - Receiver test vectors for any language: [test-vectors/receiver-v0.4.json](test-vectors/receiver-v0.4.json) (format in SPEC section 14)
 - Agent card test vectors: [test-vectors/card-v2.json](test-vectors/card-v2.json) (format in SPEC section 14)

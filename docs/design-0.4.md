@@ -1,6 +1,8 @@
 # Design note: AUN 0.4, the fixes from the 2026-11-02 review
 
-Status: draft, after research and one review with a second AI. The rules are in
+Status: draft, after research, one review with a second AI, and a Node
+implementation written from the spec alone (it found the ambiguities that sections
+5, 8 and 9 now settle). The rules are in
 [SPEC.md](../SPEC.md). This note keeps why each was chosen and what was not.
 
 ## Why break compatibility now
@@ -13,10 +15,12 @@ nodes make new cards, and sessions do not carry over.
 
 ## 1. Small-order keys
 
-Measured with `cryptography` 50.0.2: every small-order public key in both sign
-bits, and the non-canonical `eeff...7f`, accepted a signature made without a
-private key. RFC 8032 and FIPS 186-5 do not refuse such keys, and Go, BoringSSL
-and OpenSSL do not either, so the spec has to.
+Measured: `cryptography` 50.0.2 (its own OpenSSL 4.0.3) accepted a signature made
+without a private key for every small-order public key in both sign bits, and for
+the non-canonical `eeff...7f`. Node 24.22.1 (OpenSSL 3.5.9) refused every attempt
+with the same keys. By their source code, Go and BoringSSL do not refuse such keys,
+and libsodium does. RFC 8032 and FIPS 186-5 do not ask for it. So the answer depends
+on the library, and the spec has to decide.
 
 - **Chosen:** refuse by comparing integers (section 8), which works in every
   language. It covers the same points as the libsodium 1.0.18 list. R gets the
@@ -44,8 +48,8 @@ handle it at display.
 - **Not chosen:** display handling only. A model reading the text is the main
   case here, and marking characters on a screen does not reach it.
 - **Cost, accepted:** tag-sequence flags, Japanese ideographic variation
-  sequences (they use the supplementary selectors), some old Hangul, and line
-  breaks in `topic`. The Mongolian selectors stay allowed because the script
+  sequences (they use the supplementary selectors), some old Hangul, explicit
+  direction marks in right-to-left text, and line breaks in `topic`. The Mongolian selectors stay allowed because the script
   needs them.
 
 ## 3. Node ID of 128 bits
@@ -77,7 +81,9 @@ and ID checks, RFC 4130).
 - **Not chosen:** a status query, which adds a second interface and authentication.
 - **Cost, accepted:** a node that loses its records can accept a copy of a
   `REQUEST` for about 7 days, where 0.3 limited this to 300 seconds. The spec says
-  so and asks such a node to wait. Without a third party the two sides cannot be
+  so and asks such a node to wait. A node that fetches from its endpoint after the
+  limit drops what waited there, because only its own clock counts. Without a third
+  party the two sides cannot be
   made certain of each other, so the unknown outcome remains and is shown.
 
 ## 5. `session_version`

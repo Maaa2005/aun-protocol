@@ -431,6 +431,30 @@
       "final": null
     },
     {
+      "name": "signature_s_above_the_order",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzIiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5OWYxZmM1ODUyM2U4MmI2NCIsCiAgImFnZW50X2lkIjogImFnZW50LWEiLAogICJwdWJsaWNfa2V5IjogIjV5SDkrTGx4ZlRGT2JFUHVUaTZKTE1sbzlvbS9MNWYzdGFOYlh2RmdDalU9IiwKICAiZGlzcGxheV9uYW1lIjogIk5vZGUgQSIsCiAgInByb3RvY29sX3ZlcnNpb25zIjogWwogICAgImF1bi8wLjQiCiAgXSwKICAicmVsYXlfZW5kcG9pbnQiOiAiaHR0cHM6Ly9yZWxheS5leGFtcGxlL2F1bi9hIiwKICAiaXNzdWVkX2F0IjogIjIwOTktMDEtMDFUMDk6MDA6MDArMDk6MDAiLAogICJzaWduYXR1cmUiOiAiN0VMblFYWFBXS2Q5QUUxQ1BNRkorZHhQcDNrcWtHdnBRZDdtUEdvczVhM2hXS1VML05kU0pGWnlzcWk2YXl1TUxDNjB0Yk5pZ1pTK1NVTWx4NUJqRnc9PSIKfQo=",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "CARD_SIGNATURE_INVALID"
+        }
+      ],
+      "final": null
+    },
+    {
+      "name": "signature_identity_r",
+      "steps": [
+        {
+          "card": "ewogICJ2ZXJzaW9uIjogImF1bi1jYXJkLzIiLAogICJub2RlX2lkIjogImFndF8yOTFlMWRmMjdjYzFmMGY5OWYxZmM1ODUyM2U4MmI2NCIsCiAgImFnZW50X2lkIjogImFnZW50LWEiLAogICJwdWJsaWNfa2V5IjogIjV5SDkrTGx4ZlRGT2JFUHVUaTZKTE1sbzlvbS9MNWYzdGFOYlh2RmdDalU9IiwKICAiZGlzcGxheV9uYW1lIjogIk5vZGUgQSIsCiAgInByb3RvY29sX3ZlcnNpb25zIjogWwogICAgImF1bi8wLjQiCiAgXSwKICAicmVsYXlfZW5kcG9pbnQiOiAiaHR0cHM6Ly9yZWxheS5leGFtcGxlL2F1bi9hIiwKICAiaXNzdWVkX2F0IjogIjIwOTktMDEtMDFUMDk6MDA6MDArMDk6MDAiLAogICJzaWduYXR1cmUiOiAiQVFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUc4b0pTaEl2OUZPc0xlMmFZNHZoS3hweFBSd2ZJSUdKQ0pTb1ZsbDJoQ0E9PSIKfQo=",
+          "now": "2099-01-01T09:01:00+09:00",
+          "in_person": true,
+          "expect": "CARD_SIGNATURE_INVALID"
+        }
+      ],
+      "final": null
+    },
+    {
       "name": "display_name_with_override",
       "steps": [
         {

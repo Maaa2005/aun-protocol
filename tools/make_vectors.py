@@ -16,8 +16,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from aun_reference import (  # noqa: E402
     MAX_BYTES,
@@ -29,6 +27,7 @@ from aun_reference import (  # noqa: E402
     encode,
     sign_envelope,
 )
+from make_card_vectors import WEAK_KEYS  # noqa: E402
 from make_examples import TEST_ONLY_NOTE, _node  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -178,21 +177,24 @@ def with_s_plus_l(data: bytes) -> bytes:
                   .decode("ascii"))
 
 
-def with_identity_r(data: bytes) -> bytes:
-    """Sign as A with R = the identity point, which only A can do. S = h * a."""
+def with_weak_r(data: bytes, r_hex: str) -> bytes:
+    """Sign as A with a weak R and S = h * a, which only A can do.
+
+    With R = the identity this verifies under RFC 8032 in every library that
+    does not refuse it. With a torsion point it verifies under the equation
+    that multiplies by 8.
+    """
     envelope = json.loads(data)
     del envelope["signature"]
     seed = KEYS["a"]["private"].private_bytes_raw()
     scalar = bytearray(hashlib.sha512(seed).digest()[:32])
     scalar[0] &= 248
     scalar[31] = (scalar[31] & 127) | 64
-    r = bytes([1]) + bytes(31)
+    r = bytes.fromhex(r_hex)
     public = base64.b64decode(KEYS["a"]["public_key"])
     h = int.from_bytes(hashlib.sha512(r + public + canonical(envelope)).digest(), "little")
     s = h * int.from_bytes(scalar, "little") % ORDER
-    signature = r + s.to_bytes(32, "little")
-    Ed25519PublicKey.from_public_bytes(public).verify(signature, canonical(envelope))
-    envelope["signature"] = base64.b64encode(signature).decode("ascii")
+    envelope["signature"] = base64.b64encode(r + s.to_bytes(32, "little")).decode("ascii")
     return encode(envelope)
 
 
@@ -362,10 +364,29 @@ def build_cases() -> dict[str, dict[str, Any]]:
         dinner_with_counter() + [receive(
             accept("a", 3, pasta20, created_at=(T0 - timedelta(seconds=300)).isoformat()),
             "MESSAGE_EXPIRED")], "open")
-    cases["created 299 seconds before the request"] = (
+    cases["created exactly 300 seconds before the request"] = (
         dinner_with_counter() + [receive(
-            accept("a", 3, pasta20, created_at=(T0 - timedelta(seconds=298)).isoformat()),
+            accept("a", 3, pasta20, created_at=(T0 - timedelta(seconds=299)).isoformat()),
             "accepted")], "agreed")
+    cases["a dropped message leaves its ID and nonce unused"] = (
+        dinner_with_counter() + [receive(accept("a", 3, sushi18), payload),
+                                 receive(accept("a", 3, pasta20), "accepted")], "agreed")
+
+    # Order of the checks of sections 5.1 and 5.2.
+    cases["a repeated sequence comes before the turn"] = (
+        dinner_with_counter() + [
+            receive(counter("a", 3, "Sushi", 21), "accepted"),
+            receive(counter("a", 3, "Sushi", 19, message_id="s1-m7", nonce="s1-n7"), replayed)],
+        "open")
+    cases["a closed session comes before the created_at check"] = ([
+        receive(opening(), "accepted"), send(accept("b", 2, pasta19)),
+        receive(counter("a", 3, "Sushi", 20, created_at=held(1).isoformat()), state, held(1))],
+        "agreed")
+    cases["ERROR only answers REQUEST"] = (
+        dinner_with_counter() + [receive(
+            signed("a", "ERROR", {}, {"code": "NOT_SUPPORTED"}, 3), state)], "open")
+    single("a bad deadline comes before late arrival",
+           opening(payload=request(expires_at=T0.isoformat())), payload, held(301))
     single("request delivered 300 seconds after the deadline", opening(), "accepted", held(300))
     single("request delivered 301 seconds after the deadline", opening(), "SESSION_EXPIRED",
            held(301))
@@ -416,6 +437,11 @@ def build_cases() -> dict[str, dict[str, Any]]:
     single("year 0001 at +23:59", opening(created_at="0001-01-01T00:00:00+23:59"), schema)
     single("year 9999 at -23:59", opening(created_at="9999-12-31T23:59:00-23:59"), schema)
     single("year 0001 in UTC", opening(created_at="0001-01-01T00:00:00Z"), payload)
+    single("written year 0000", opening(created_at="0000-12-31T23:00:00-02:00"), schema)
+    single("-0 reads as 0", amount_request(AMOUNT, {"share": 0}).replace(
+        b'"min": 0', b'"min": -0'), "accepted")
+    single("lowercase t", opening(created_at="2099-01-01t09:00:01+09:00"), schema)
+    single("lowercase z", opening(created_at="2099-01-01T00:00:01z"), schema)
     single("offset -00:00 is UTC", opening(created_at="2099-01-01T00:00:01-00:00"), "accepted")
     single("no such date in expires_at", time_request(expires_at=BAD_DATE), schema)
     single("no such date in a window", time_request(window_start=BAD_DATE), schema)
@@ -434,7 +460,8 @@ def build_cases() -> dict[str, dict[str, Any]]:
     # Signatures only the key's holder can make (section 8).
     bad_sig = "MESSAGE_SIGNATURE_INVALID"
     single("signature with S above the group order", with_s_plus_l(opening()), bad_sig)
-    single("signature with a small-order R", with_identity_r(opening()), bad_sig)
+    for name, r_hex in WEAK_KEYS.items():
+        single(f"signature with weak R {name}", with_weak_r(opening(), r_hex), bad_sig)
 
     # Characters (section 2).
     def topic(text: str) -> bytes:
@@ -451,7 +478,9 @@ def build_cases() -> dict[str, dict[str, Any]]:
         single(f"topic with {name}", topic(text), schema)
     for name, text in (("joiner", "\U0001f468\u200d\U0001f373"), ("non-joiner", "\u0645\u06cc\u200c\u062e"),
                        ("emoji selector", "\u2764\ufe0f"), ("Mongolian selector", "\u1820\u180b"),
-                       ("Japanese", "金曜の夕食"), ("private use", "\ue000")):
+                       ("Japanese", "金曜の夕食"), ("private use", "\ue000"),
+                       ("Arabic letters", "\u0645\u0631\u062d\u0628\u0627"),
+                       ("Hebrew letters", "\u05e9\u05dc\u05d5\u05dd")):
         single(f"topic with {name} is fine", topic(text), "accepted")
     single("unit with an override", amount_request(dict(AMOUNT, unit="J\u202eY"), {"share": 0}), schema)
     single("option with a tag", signed("a", "REQUEST", request([
@@ -459,6 +488,8 @@ def build_cases() -> dict[str, dict[str, Any]]:
         {"offer": [{"place": "a\U000e0041"}]}, 1), schema)
     single("open choice value with a newline", signed("a", "REQUEST", request([
         {"name": "place", "kind": "choice"}]), {"offer": [{"place": "a\nb"}]}, 1), schema)
+    single("a string with a newline where an amount belongs",
+           amount_request(AMOUNT, {"share": "a\nb"}), schema)
     single("message ID not ASCII", opening(message_id="メッセージ"), schema)
     single("session ID with a space", opening(session_id="s 1"), schema)
     single("nonce with a newline", opening(nonce="n1\n"), schema)

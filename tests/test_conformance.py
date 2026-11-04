@@ -10,6 +10,7 @@ import copy
 import json
 import subprocess
 import sys
+import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -1016,3 +1017,85 @@ def test_endpoint_usable(url, usable):
 ])
 def test_address_usable(address, usable):
     assert aun_reference.address_usable(address) is usable
+
+
+# ---- from review: atomic receipt, stateless check, address and endpoint edges
+
+
+def test_two_copies_at_once_give_one_accepted_and_one_duplicate(monkeypatch):
+    """SPEC section 9: steps 7 and 8 and their record are one atomic step."""
+    conv = open_dinner()
+    data = conv.signed("b", "a", "ACCEPT", {},
+                       {"agreed": {"place": "Pasta", "time": slot(19)}}, 2)
+    node = conv.nodes["a"]
+    barrier = threading.Barrier(2)
+    check_turn = Node._check_turn
+
+    def held(self, *args):
+        check_turn(self, *args)
+        try:
+            barrier.wait(timeout=0.5)
+        except threading.BrokenBarrierError:
+            pass
+
+    monkeypatch.setattr(Node, "_check_turn", held)
+    results = []
+    threads = [threading.Thread(target=lambda: results.append(node.receive(data, T0)))
+               for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert sorted(results) == ["accepted", "duplicate"]
+
+
+def test_stateless_check_has_only_the_future_limit():
+    conv = Conversation(make_nodes())
+    envelope = sign_envelope(
+        conv.unsigned("a", "b", "REQUEST", request([AMOUNT]), {"offer": [{"share": 0}]}, 1, at=T0),
+        conv.nodes["a"].private_key)
+    public = conv.nodes["a"].private_key.public_key().public_bytes_raw()
+    aun_reference.verify_envelope(envelope, public, now=T0 + timedelta(days=1))
+    with pytest.raises(VerificationError) as caught:
+        aun_reference.verify_envelope(envelope, public, now=T0 - timedelta(seconds=301))
+    assert caught.value.code == "MESSAGE_EXPIRED"
+
+
+@pytest.mark.parametrize("address", [
+    "100:0:0:1::1",          # discard
+    "2001:db8::1",           # documentation
+    "3fff::1",               # documentation
+    "2001:2::1",             # benchmarking
+    "2001::1",               # Teredo
+    "2002:808:808::1",       # 6to4
+    "5f00::1",               # segment routing
+    "4000::1",               # not allocated for global use
+    "ff02::1",
+    "192.0.2.1",
+    "198.18.0.1",
+    "198.51.100.1",
+    "203.0.113.1",
+    "240.0.0.1",
+    "255.255.255.255",
+    "::ffff:10.0.0.1",
+    "64:ff9b::a00:1",
+])
+def test_address_not_globally_reachable(address):
+    assert aun_reference.address_usable(address) is False
+
+
+@pytest.mark.parametrize("address", [
+    "1.1.1.1", "::ffff:8.8.8.8", "64:ff9b::808:808", "2606:4700:4700::1111",
+    "2a00:1450:4001::1",
+])
+def test_address_globally_reachable(address):
+    assert aun_reference.address_usable(address) is True
+
+
+@pytest.mark.parametrize("url", [
+    "https://relay.example:abc/inbox", "https://[", "https://relay.example:99999/a",
+    "https://relay.example:0/a", "https://relay.example/#", "https://relay.example/a#",
+    "https://good.example" + chr(92) + "@127.0.0.1/",
+])
+def test_endpoint_that_does_not_parse_is_not_usable(url):
+    assert aun_reference.endpoint_usable(url) is False

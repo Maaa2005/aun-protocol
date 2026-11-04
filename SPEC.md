@@ -112,21 +112,25 @@ move with the Unicode version.
 ZWNJ and ZWJ (`200C`, `200D`), the variation selectors `FE00-FE0F` and the
 Mongolian selectors `180B-180D` and `180F` stay allowed, because ordinary
 writing and emoji need them. Refusing the table costs the flag emoji built from
-tags, Japanese ideographic variation sequences and some old Hangul. The check is
+tags, Japanese ideographic variation sequences such as a name's exact glyph, some
+old Hangul, and the explicit direction marks of right-to-left writing (the letters
+of Arabic and Hebrew pass). A sender removes these before signing. The check is
 not expressed in the schema, because patterns outside the ASCII range read
 differently with and without the `u` flag of ECMA-262.
 
 The table is no defence on its own. It refuses hidden characters only: letters
 that look alike and plain instructions pass it (section 9).
 
-A **date-time** is RFC 3339 with `Z` or an offset, seconds optional, at most 6
-fraction digits. It must name a real instant: a calendar date that exists,
+A **date-time** is RFC 3339 with an uppercase `T`, and uppercase `Z` or an offset,
+seconds optional, at most 6 fraction digits. It must name a real instant: a calendar date that exists,
 hours 00 to 23, minutes and seconds 00 to 59 (no leap second), an offset of
-at most 23:59, and, converted to UTC, a year from 0001 to 9999. `-00:00` means
+at most 23:59, a written year from 0001 to 9999, and, converted to UTC, a year
+from 0001 to 9999. `-00:00` means
 UTC.
 
 Lengths count Unicode code points. Strings compare code point by code point,
-with no normalization. Every pattern in this document and in the schema
+with no normalization. Only the key order inside JCS (section 8) differs, by
+UTF-16 code units as RFC 8785 says. Every pattern in this document and in the schema
 matches the whole string with ECMA-262 meaning: `[0-9]` is ASCII only, and `$`
 does not match before a trailing newline.
 
@@ -152,8 +156,8 @@ a field that announced it carried no checkable meaning.
   are in section 10.
 - `ERROR` answers a valid `REQUEST` that the receiver will not handle, for
   example an intent it does not take. It is allowed only as the answer to
-  `REQUEST`. Later in a session the parties already handle the request, and
-  `REJECT` says no.
+  `REQUEST`, and is otherwise dropped (`INVALID_STATE_TRANSITION`). Later in a
+  session the parties already handle the request, and `REJECT` says no.
 
 Illustrative `REQUEST` (computed values shortened):
 
@@ -244,6 +248,9 @@ one peer cannot block or guess its way into a session of another. A second
 `REQUEST` for a session already known from the same node is dropped
 (`MESSAGE_REPLAYED`).
 
+A `REQUEST` is checked in this order: whether the session is known, the deadline
+rule of section 5.3, arrival on time, the declaration, the offer.
+
 ### 5.2 Turns
 
 - Every later message comes from one party of the session and goes to the
@@ -257,24 +264,38 @@ one peer cannot block or guess its way into a session of another. A second
 - At most 3 `COUNTER` per session, counted over both parties. So a session has
   at most 5 messages.
 - After `ACCEPT`, `REJECT` or `ERROR` the session is closed. Any later message
-  is dropped.
+  is dropped (`INVALID_STATE_TRANSITION`).
 
 A message that breaks a turn rule is dropped with `INVALID_STATE_TRANSITION`.
 A message for an unknown session that is not a `REQUEST` is dropped the same
 way. That includes a message from a node that is not a party: for that node
 the session does not exist.
 
+A later message is checked in this order, and the first failure gives the code:
+
+1. `intent` and the parties (`SESSION_BINDING_MISMATCH`).
+2. A `sequence` already recorded (`MESSAGE_REPLAYED`, section 9 step 8).
+3. The session is closed (`INVALID_STATE_TRANSITION`), or arrival is too late
+   (`SESSION_EXPIRED`, section 5.3).
+4. `sequence` and turn (`INVALID_STATE_TRANSITION`).
+5. `created_at` (section 5.3).
+6. The rules of the message type: the limit of 3 `COUNTER`, `ERROR` only as the
+   answer to `REQUEST`, and section 6.
+
 ### 5.3 Deadline
 
 - `REQUEST.payload.expires_at` fixes one deadline. It MUST be after the
-  `REQUEST`'s `created_at` and at most 7 days later. It cannot be extended.
+  `REQUEST`'s `created_at` and at most 7 days later (else
+  `INVALID_NEGOTIATION_PAYLOAD`). It cannot be extended.
 - A later message is on time when its signed `created_at` is not after
   `expires_at` (else `SESSION_EXPIRED`) and not more than 300 seconds before
   the `REQUEST`'s `created_at` (else `MESSAGE_EXPIRED`). `created_at` is the
   sender's own claim. It does not prove when the message was really made.
-- A message arrives on time when the receiver's clock is at most 300 seconds
-  after `expires_at` (else `SESSION_EXPIRED`). This holds for a `REQUEST` too,
-  so a message that a relay kept for hours still counts.
+- A message arrives on time when the clock of the receiving node, at the moment it
+  runs these checks, is at most 300 seconds after `expires_at` (else
+  `SESSION_EXPIRED`). This holds for a `REQUEST` too, so a message that a relay kept
+  for hours still counts. The time an endpoint took it does not count, and a node
+  that fetches from its endpoint too late drops the message.
 - A session with no closing message becomes `expired` 300 seconds after
   `expires_at`. That is the clock passing, not an effect of a dropped message.
 - A sender MAY resend any message it sent, as the identical bytes, until the
@@ -342,8 +363,8 @@ little-endian integer with the top bit cleared, its value y is at least
 - `c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a`
 
 These are the points of small order, with either sign bit, and the spellings of
-y that are not canonical. Common libraries do not refuse them, so this document
-does. Anyone can forge signatures for a small-order public key, with no private
+y that are not canonical. Libraries answer differently, so this document decides.
+Anyone can forge signatures for a small-order public key, with no private
 key, so such a key would also let its holder deny what it signed.
 
 A signature verifies when its R (the first 32 bytes) is not weak, its S (the
@@ -387,14 +408,16 @@ section 14 check both.
    `MESSAGE_TOO_LARGE`. A sender MUST check the same limit. The total limit
    wins over the per-field limits.
 2. **Strict JSON.** One JSON object in valid UTF-8 with no byte order mark,
-   following I-JSON (RFC 7493): nesting at most 8 levels counting the
-   envelope as level 1, no duplicate keys, no lone surrogate (written or
+   following I-JSON (RFC 7493): nesting at most 8 levels of objects and arrays
+   counting the envelope as level 1, no duplicate keys, no lone surrogate (written or
    escaped), and integers only, within ±(2^53 - 1). So no fraction or exponent
-   (no `3000.0`, no `1E0`), no `NaN` or infinities. Else
+   (no `3000.0`, no `1E0`), no `NaN` or infinities. `-0` reads as the integer 0.
+   Else
    `MESSAGE_SCHEMA_INVALID`.
 3. **Schema.** The envelope matches the 0.4 schema, every date-time in it is
-   valid and every free text holds no refused code point (section 2). Else
-   `MESSAGE_SCHEMA_INVALID`.
+   valid and every free text holds no refused code point (section 2). Every string
+   value of a package counts as free text here, before its issue is looked up.
+   Else `MESSAGE_SCHEMA_INVALID`.
 4. **Peer and address.** `sender_node_id` is a trusted peer (else
    `PEER_NOT_TRUSTED`), whose registered personal agent is `sender_agent_id`
    (else `AGENT_IDENTITY_MISMATCH`). `receiver_node_id` and
@@ -412,18 +435,22 @@ section 14 check both.
    a `message_id` known from that node, or a nonce that node already used, is
    dropped (`MESSAGE_REPLAYED`).
 8. **State and payload.** Sections 5 and 6: the session, the turn, the
-   deadline, the declaration and the packages. A message for a `sequence`
-   already recorded is dropped (`MESSAGE_REPLAYED`).
+   deadline, the declaration and the packages, in the order of sections 5.1 and
+   5.2. A message for a `sequence` already recorded is dropped (`MESSAGE_REPLAYED`).
 
-A node keeps sessions, message IDs and nonces durably, per sender node, at least
-until 300 seconds after the session deadline. After that a copy of a `REQUEST`
+A node runs steps 7 and 8 and records their result as one atomic step for a
+session, so two copies arriving together give one `accepted` and one duplicate.
+It keeps sessions, message IDs and nonces durably, per sender node, until its clock
+is past 300 seconds after the session deadline, or longer. After that a copy of a `REQUEST`
 is dropped by its deadline (section 5.3) and any other copy as a message for an
 unknown session. A node that loses these records can accept a copy of a `REQUEST`
 again, up to about 7 days later. 0.4 gives no protection in that case. Such a
 node SHOULD take no `REQUEST` until 7 days and 600 seconds after the loss.
 
-A sender runs steps 1 to 3, 7 and 8 on its own message before sending it. For
-step 7 that means it never reuses one of its own message IDs or nonces.
+A dropped message records nothing, so its message ID and nonce stay unused. A
+sender runs steps 1 to 3, 7 and 8 on its own message before sending it, by its
+own clock. For step 7 that means it never reuses one of its own message IDs or
+nonces.
 
 ### Free text is data
 
@@ -491,7 +518,7 @@ All nine fields are required. No other field is allowed. The shapes are in
 | `public_key` | string | Base64 of the raw 32-byte Ed25519 key, in the canonical form of section 8: 44 characters. |
 | `display_name` | string of 1 to 100 code points | Name shown to humans. Free text (sections 2 and 9). |
 | `protocol_versions` | array of 1 to 8 distinct strings of 1 to 32 printable ASCII characters other than space | Includes `"aun/0.4"`. Other entries are ignored. |
-| `relay_endpoint` | string | Where the node receives messages: `https://` followed by 1 to 248 printable ASCII characters other than space. |
+| `relay_endpoint` | string | Where the node receives messages: `https://` followed by 1 to 248 printable ASCII characters other than space. A card is not refused for an endpoint that a sender will not use (section 11.4). |
 | `issued_at` | date-time | When the node made this card (section 2). |
 | `signature` | string | Base64 of the 64-byte Ed25519 signature by the card's own key over the JCS of the card without `signature` (section 8). |
 
@@ -589,7 +616,7 @@ is that side's own matter and is not specified here.
 
 **The request.** `POST` to `relay_endpoint`, exactly as the card writes it, over
 TLS with the certificate verified. The body is the bytes of the message, without
-compression. `Content-Type` is `application/aun+json` for a message and
+compression and with a `Content-Length`. `Content-Type` is `application/aun+json` for a message and
 `application/aun-card+json` for a card. There is no other authentication: a
 signature inside the body already says who sent it, and the node checks that
 (section 9).
@@ -599,28 +626,44 @@ signature inside the body already says who sent it, and the node checks that
 | Status | Meaning |
 | --- | --- |
 | `202` | The endpoint took the body. Nothing more: the other side may not have read or accepted it. |
+| `400` | Not exactly one `Content-Length` of digits, or a `Transfer-Encoding` or `Content-Encoding`. |
 | `405`, `415` | Not a `POST`, or another media type. |
 | `413` | Over 16384 bytes for a message or 2048 bytes for a card. |
 | `429`, `5xx` | Not taken now. `429` SHOULD carry `Retry-After`. |
 
 An endpoint MUST NOT make its answer depend on the checks of sections 9 or 11.2,
 so a message that will be dropped gets the same `202`. It MAY limit the rate by
-its own policy.
+its own policy, which does not look at those checks or at who is trusted either.
 
 **The sender.**
 
 - Any `2xx` is the deposit of section 5.3.
-- `408`, `429`, `5xx` or a failed connection: send the identical bytes again
-  after a pause, respecting `Retry-After`, and stop 300 seconds after `expires_at`.
-  A card update stops after a limited number of attempts of the sender's choice.
+- `408`, `429`, `5xx` or a failed connection, which includes a certificate that
+  fails: send the identical bytes again after a pause, at least as long as
+  `Retry-After` asks in either of its forms, and stop 300 seconds after `expires_at`.
+  A pause asked for beyond that ends the sending. A card update stops after a limited
+  number of attempts of the sender's choice.
+- The status is enough, so a sender does not read the body of an answer, and it
+  limits the time of one attempt, so an endpoint cannot hold it past the limit.
 - Any other status gives up. A redirect is not followed.
-- It MUST NOT use an endpoint whose URL has user information or a fragment.
+- It MUST NOT use an endpoint that does not parse by RFC 3986 as an `https` URL
+  with a host and a port from 1 to 65535 if one is written, or that has user
+  information, a `#` or a backslash.
 - It MUST check every address it connects to, after resolving the name and on the
-  connection it really uses, and MUST NOT connect to one that is not globally
-  reachable by RFC 6890, reading an IPv4 address inside IPv6 as IPv4. Only a
-  node's own configuration can allow other addresses, for example for tests.
+  connection it really uses. A second resolution MUST NOT be able to move that
+  connection. Only a node's own configuration can allow other addresses than
+  these, for example for tests:
 
-Nothing tells a sender that a body was lost after a `202`.
+| Family | A sender connects only to |
+| --- | --- |
+| IPv4, also as `::ffff:0:0/96` or `64:ff9b::/96` | Anything but `0.0.0.0/8`, `10.0.0.0/8`, `100.64.0.0/10`, `127.0.0.0/8`, `169.254.0.0/16`, `172.16.0.0/12`, `192.0.0.0/24`, `192.0.2.0/24`, `192.88.99.0/24`, `192.168.0.0/16`, `198.18.0.0/15`, `198.51.100.0/24`, `203.0.113.0/24`, `224.0.0.0/4`, `240.0.0.0/4` |
+| Other IPv6 | `2000::/3`, but not `2001::/23`, `2001:db8::/32`, `2002::/16` or `3fff::/20` |
+
+The table is fixed here because the registries behind it (RFC 6890) grow and
+libraries answer differently. A longer list of refusals is allowed.
+
+Nothing tells a sender that a body was lost after a `202`. A sender and an endpoint
+are in [tools/aun_http.py](tools/aun_http.py).
 
 Probing a peer's limits with repeated sessions is a local policy matter. This
 specification does not claim to prevent it.
@@ -695,9 +738,10 @@ This section is informative.
   JCS vectors, every example, the receiver vectors, the card vectors, and more
   dropped cases of sections 4 to 9.
 
+- [tests/test_http.py](tests/test_http.py) runs section 11.4 over real TLS
+  connections on one machine, through [tools/aun_http.py](tools/aun_http.py).
+
 Not covered by tests: approval (section 7), free text handling (section 9),
 double booking across sessions (section 7), the unknown outcome of an
-unconfirmed `ACCEPT` (section 5.3), the in-person step, durable and atomic
-storage, the HTTP connection itself and the check of resolved addresses on it
-(section 11.4). These are local duties a receiver cannot observe. The tests do
-cover the decisions of section 11.4 as plain functions, without a network.
+unconfirmed `ACCEPT` (section 5.3), the in-person step, durable storage, and
+delivery across a real network. These are local duties a receiver cannot observe.

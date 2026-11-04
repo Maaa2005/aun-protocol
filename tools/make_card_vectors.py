@@ -8,6 +8,7 @@ Usage:
 from __future__ import annotations
 
 import base64
+import hashlib
 import copy
 import json
 import sys
@@ -22,6 +23,7 @@ from aun_reference import (  # noqa: E402
     PROTOCOL,
     Node,
     VerificationError,
+    canonical,
     encode_card,
     node_id_from_public_key,
     parse_time,
@@ -123,6 +125,33 @@ def raw(data: bytes, old: bytes, new: bytes) -> bytes:
     return data.replace(old, new)
 
 
+ORDER = 2**252 + 27742317777372353535851937790883648493
+
+
+def with_s_plus_l(data: bytes) -> bytes:
+    """The same signature with S + L: it passes a check that skips S < L."""
+    parsed = json.loads(data)
+    signature = base64.b64decode(parsed["signature"])
+    s = int.from_bytes(signature[32:], "little") + ORDER
+    return tampered(data, signature=base64.b64encode(signature[:32] + s.to_bytes(32, "little"))
+                    .decode("ascii"))
+
+
+def with_identity_r() -> bytes:
+    """Card A signed by its own key with R = the identity and S = h * a."""
+    parsed = fields("a", T0)
+    seed = KEYS["a"]["private"].private_bytes_raw()
+    scalar = bytearray(hashlib.sha512(seed).digest()[:32])
+    scalar[0] &= 248
+    scalar[31] = (scalar[31] & 127) | 64
+    r = bytes([1]) + bytes(31)
+    public = base64.b64decode(KEYS["a"]["public_key"])
+    h = int.from_bytes(hashlib.sha512(r + public + canonical(parsed)).digest(), "little")
+    s = h * int.from_bytes(scalar, "little") % ORDER
+    parsed["signature"] = base64.b64encode(r + s.to_bytes(32, "little")).decode("ascii")
+    return encode_card(parsed)
+
+
 def spare_bits_key() -> str:
     """The same key with the last data character moved: another spelling of the bytes."""
     key = KEYS["a"]["public_key"]
@@ -201,6 +230,10 @@ def build_cases() -> dict[str, dict[str, Any]]:
         single(f"weak_key_{name}", card(
             "a", T0, public_key=base64.b64encode(raw_key).decode("ascii"),
             node_id=node_id_from_public_key(raw_key)), "CARD_KEY_WEAK")
+
+    # Signatures only the key's holder can make (step 6, section 8).
+    single("signature_s_above_the_order", with_s_plus_l(a0()), bad_sig)
+    single("signature_identity_r", with_identity_r(), bad_sig)
 
     # Characters (step 3).
     single("display_name_with_override", card("a", T0, display_name="Node \u202eA"), schema)

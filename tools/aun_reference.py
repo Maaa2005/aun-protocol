@@ -23,6 +23,7 @@ import ipaddress
 import json
 import re
 import sys
+import threading
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -398,15 +399,15 @@ def verify_envelope(
     now: datetime | None = None,
     window_seconds: int | None = WINDOW_SECONDS,
 ) -> None:
-    """Stateless checks: schema, signature, payload hash and time window."""
+    """Stateless checks: schema, signature, payload hash and the clock ahead."""
     validate_schema(envelope)
     verify_signature(envelope, public_key)
     if window_seconds is not None:
         current = now or datetime.now(timezone.utc)
-        age = abs((current - parse_time(envelope["created_at"])).total_seconds())
-        if age > window_seconds:
+        ahead = (parse_time(envelope["created_at"]) - current).total_seconds()
+        if ahead > window_seconds:
             raise VerificationError(
-                "MESSAGE_EXPIRED", f"created_at is {age:.0f}s from now"
+                "MESSAGE_EXPIRED", f"created_at is {ahead:.0f}s ahead"
             )
 
 
@@ -678,6 +679,7 @@ class Node:
     nonces: set[tuple[str, str]] = field(default_factory=set)
     cards: dict[str, dict[str, Any]] = field(default_factory=dict)
     last_issued_at: datetime | None = None
+    _lock: threading.RLock = field(default_factory=threading.RLock, repr=False, compare=False)
 
     @property
     def node_id(self) -> str:
@@ -704,31 +706,32 @@ class Node:
         stored identity without an `issued_at`: any valid card with the same
         key and agent is an update.
 
-        The compare and the replace are one step here because the reference
-        is single-threaded. A real node does them atomically and durably.
+        The compare and the replace are one step here, under a lock. A real
+        node also keeps the result durably.
         """
         card = verify_card(data, now)
         node_id = card["node_id"]
-        stored = self.cards.get(node_id)
-        peer = self.trusted.get(node_id)
-        if stored is None and peer is None:
-            if not in_person:
-                raise VerificationError("CARD_PEER_NOT_TRUSTED", node_id)
-            result = "trusted"
-        else:
-            known_key, known_agent = (
-                (stored["public_key"], stored["agent_id"]) if stored is not None
-                else (peer.public_key, peer.agent_id)
-            )
-            if card["public_key"] != known_key or card["agent_id"] != known_agent:
-                raise VerificationError("CARD_IDENTITY_MISMATCH", "key or agent differs")
-            if stored is not None and not (
-                parse_time(card["issued_at"]) > parse_time(stored["issued_at"])
-            ):
-                raise VerificationError("CARD_STALE", "issued_at is not later")
-            result = "updated"
-        self.cards[node_id] = card
-        self.trust(Peer(card["agent_id"], card["public_key"]))
+        with self._lock:
+            stored = self.cards.get(node_id)
+            peer = self.trusted.get(node_id)
+            if stored is None and peer is None:
+                if not in_person:
+                    raise VerificationError("CARD_PEER_NOT_TRUSTED", node_id)
+                result = "trusted"
+            else:
+                known_key, known_agent = (
+                    (stored["public_key"], stored["agent_id"]) if stored is not None
+                    else (peer.public_key, peer.agent_id)
+                )
+                if card["public_key"] != known_key or card["agent_id"] != known_agent:
+                    raise VerificationError("CARD_IDENTITY_MISMATCH", "key or agent differs")
+                if stored is not None and not (
+                    parse_time(card["issued_at"]) > parse_time(stored["issued_at"])
+                ):
+                    raise VerificationError("CARD_STALE", "issued_at is not later")
+                result = "updated"
+            self.cards[node_id] = card
+            self.trust(Peer(card["agent_id"], card["public_key"]))
         return result
 
     def issue_card(
@@ -774,12 +777,12 @@ class Node:
         if ahead > WINDOW_SECONDS:
             raise VerificationError("MESSAGE_EXPIRED", f"created_at is {ahead:.0f}s ahead")
 
-        if self._is_duplicate(envelope):
-            return "duplicate"
-        if (envelope["sender_node_id"], envelope["nonce"]) in self.nonces:
-            raise VerificationError("MESSAGE_REPLAYED", "nonce already used")
-
-        self._apply(envelope, now)
+        with self._lock:  # steps 7 and 8 and their record are one atomic step
+            if self._is_duplicate(envelope):
+                return "duplicate"
+            if (envelope["sender_node_id"], envelope["nonce"]) in self.nonces:
+                raise VerificationError("MESSAGE_REPLAYED", "nonce already used")
+            self._apply(envelope, now)
         return "accepted"
 
     def _is_duplicate(self, envelope: dict[str, Any]) -> bool:
@@ -812,11 +815,12 @@ class Node:
         if _party(envelope, "sender") != self.me:
             raise VerificationError("SESSION_BINDING_MISMATCH", "sender is not me")
         verify_signature(envelope, self.private_key.public_key().public_bytes_raw())
-        if (self.node_id, envelope["message_id"]) in self.seen:
-            raise VerificationError("MESSAGE_REPLAYED", "message_id reused")
-        if (self.node_id, envelope["nonce"]) in self.nonces:
-            raise VerificationError("MESSAGE_REPLAYED", "nonce reused")
-        self._apply(envelope, now)
+        with self._lock:
+            if (self.node_id, envelope["message_id"]) in self.seen:
+                raise VerificationError("MESSAGE_REPLAYED", "message_id reused")
+            if (self.node_id, envelope["nonce"]) in self.nonces:
+                raise VerificationError("MESSAGE_REPLAYED", "nonce reused")
+            self._apply(envelope, now)
 
     # -- shared state machine ---------------------------------------------
 
@@ -927,7 +931,15 @@ class Node:
 # ---- delivery (SPEC section 11.4) -------------------------------------------
 
 
+# SPEC section 11.4. A fixed table, because `is_global` moves with the Python version.
 _NAT64 = ipaddress.ip_network("64:ff9b::/96")
+_GLOBAL_V6 = ipaddress.ip_network("2000::/3")
+_REFUSED_V6 = tuple(ipaddress.ip_network(n) for n in (
+    "2001::/23", "2001:db8::/32", "2002::/16", "3fff::/20"))
+_REFUSED_V4 = tuple(ipaddress.ip_network(n) for n in (
+    "0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16",
+    "172.16.0.0/12", "192.0.0.0/24", "192.0.2.0/24", "192.88.99.0/24", "192.168.0.0/16",
+    "198.18.0.0/15", "198.51.100.0/24", "203.0.113.0/24", "224.0.0.0/4", "240.0.0.0/4"))
 MEDIA_TYPES = {"application/aun+json": MAX_BYTES, "application/aun-card+json": CARD_MAX_BYTES}
 
 
@@ -949,23 +961,32 @@ def delivery_action(status: int) -> str:
 
 
 def endpoint_usable(url: str) -> bool:
-    """https, with a host and without user information or a fragment."""
-    parts = urlsplit(url)
-    return (parts.scheme == "https" and bool(parts.hostname) and parts.username is None
-            and parts.password is None and not parts.fragment)
+    """https, with a host and a valid port, without user information or a fragment."""
+    if "#" in url or chr(92) in url:  # a backslash is read differently by other parsers
+        return False
+    try:
+        parts = urlsplit(url)
+        port = parts.port
+    except ValueError:
+        return False
+    return (parts.scheme == "https" and bool(parts.hostname) and port != 0
+            and parts.username is None and parts.password is None)
 
 
 def address_usable(address: str) -> bool:
-    """Whether a sender may connect to this resolved address.
+    """Whether a sender may connect to this resolved address (SPEC section 11.4).
 
-    An IPv4 address inside IPv6 is judged as IPv4, so it cannot hide a private one.
+    IPv6 must be global unicast. IPv4 inside IPv6 is judged as IPv4, so it
+    cannot hide a private one.
     """
     ip = ipaddress.ip_address(address)
-    if ip.version == 6:
-        ip = ip.ipv4_mapped or ip.sixtofour or ip.teredo and ip.teredo[1] or ip
-        if ip.version == 6 and (int(ip) >> 32 == 0 or ip in _NAT64):  # IPv4-compatible, ::
-            ip = ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
-    return ip.is_global and not ip.is_multicast
+    if ip.version == 6 and ip.ipv4_mapped is not None:
+        ip = ip.ipv4_mapped
+    elif ip.version == 6 and ip in _NAT64:
+        ip = ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
+    if ip.version == 4:
+        return not any(ip in network for network in _REFUSED_V4)
+    return ip in _GLOBAL_V6 and not any(ip in network for network in _REFUSED_V6)
 
 
 # ---- CLI -------------------------------------------------------------------
