@@ -1,12 +1,16 @@
 'use strict';
 // node interop/node/run.js [path-to-test-vectors-dir]
 // Runs jcs-v0.2.json, card-v2.json and receiver-v0.4.json. Prints counts and mismatches.
+// Also runs local-cases.js, and checks that a dropped or duplicate message leaves the
+// node's sessions, message IDs and nonces unchanged (SPEC section 9).
 // Exits 1 on any mismatch, and when a file holds no cases, so an empty file cannot pass.
 const fs = require('node:fs');
 const path = require('node:path');
+const { isDeepStrictEqual } = require('node:util');
 const L = require('./lib');
 const { checkCard } = require('./card');
 const { Node } = require('./receiver');
+const { localCases } = require('./local-cases');
 
 const dir = process.argv[2] || path.join(__dirname, '..', '..', 'test-vectors');
 const load = (f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
@@ -50,23 +54,44 @@ if (rv.cases.length === 0) bad.push('receiver-v0.4.json holds no cases');
 const N = rv.nodes;
 const trusted = new Map();
 for (const k of ['a', 'c']) trusted.set(N[k].node_id, { agent_id: N[k].personal_agent_id, key: Buffer.from(N[k].public_key, 'base64') });
-let rOk = 0, rSteps = 0, rStepsOk = 0;
-for (const c of rv.cases) {
-  const node = new Node({ trusted, self: { node_id: N.b.node_id, agent_id: N.b.personal_agent_id } });
-  let ok = true, lastNow = null;
-  c.steps.forEach((s, i) => {
-    rSteps++;
-    const got = node.process(Buffer.from(s.message, 'base64'), s.now, s.action);
-    lastNow = s.now;
-    if (got !== s.expect) { ok = false; bad.push(`RECV ${c.name} step ${i} (${s.action}): got ${got} want ${s.expect}`); } else rStepsOk++;
-  });
-  const fin = node.sessionStatus(N.a.node_id, 's1', lastNow);
-  if (fin !== c.final) { ok = false; bad.push(`RECV ${c.name} final: got ${fin} want ${c.final}`); }
-  if (ok) rOk++;
+// A copy of everything section 9 says a drop must leave alone.
+const recordsOf = (node) => structuredClone({ sessions: node.sessions, msgs: node.msgs, nonces: node.nonces });
+let rDrops = 0, rDropsOk = 0;
+function runCases(cases, tag) {
+  const tally = { cases: 0, steps: 0, stepsOk: 0 };
+  for (const c of cases) {
+    const node = new Node({ trusted, self: { node_id: N.b.node_id, agent_id: N.b.personal_agent_id } });
+    let ok = true, lastNow = null;
+    c.steps.forEach((s, i) => {
+      tally.steps++;
+      const before = recordsOf(node);
+      const got = node.process(Buffer.from(s.message, 'base64'), s.now, s.action);
+      lastNow = s.now;
+      if (got !== s.expect) { ok = false; bad.push(`${tag} ${c.name} step ${i} (${s.action}): got ${got} want ${s.expect}`); } else tally.stepsOk++;
+      if (got !== 'accepted') {
+        rDrops++;
+        if (isDeepStrictEqual(before, recordsOf(node))) rDropsOk++;
+        else { ok = false; bad.push(`${tag} ${c.name} step ${i} (${s.action}): ${got} changed the node's records`); }
+      }
+    });
+    const fin = node.sessionStatus(N.a.node_id, 's1', lastNow);
+    if (fin !== c.final) { ok = false; bad.push(`${tag} ${c.name} final: got ${fin} want ${c.final}`); }
+    if (ok) tally.cases++;
+  }
+  return tally;
 }
+const r = runCases(rv.cases, 'RECV');
+if (rDrops === 0) bad.push('receiver-v0.4.json holds no dropped message');
+
+// ---- cases kept here, not in the vectors (see local-cases.js)
+const local = localCases(rv);
+if (!local) bad.push('receiver-v0.4.json holds no accepted REQUEST from A for s1');
+const l = runCases(local || [], 'LOCAL');
 
 console.log(`JCS      ${jOk}/${jv.vectors.length}`);
 console.log(`cards    ${cOk}/${cv.cases.length} cases`);
-console.log(`receiver ${rOk}/${rv.cases.length} cases (${rStepsOk}/${rSteps} steps)`);
+console.log(`receiver ${r.cases}/${rv.cases.length} cases (${r.stepsOk}/${r.steps} steps)`);
+console.log(`local    ${l.cases}/${local ? local.length : 0} cases (${l.stepsOk}/${l.steps} steps)`);
+console.log(`drops    ${rDropsOk}/${rDrops} left the records unchanged`);
 console.log(bad.length ? `mismatches (${bad.length}):\n  ` + bad.join('\n  ') : 'no mismatches');
 process.exit(bad.length ? 1 : 0);

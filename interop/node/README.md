@@ -7,7 +7,13 @@ makes the two give different answers.
 
     node interop/node/run.js
 
-This needs Node 24. It exits 0 only when every case in `test-vectors/` matches.
+This needs Node 24. It exits 0 only when every case in `test-vectors/` and in
+`local-cases.js` matches, and every dropped message left the node's sessions,
+message IDs and nonces unchanged (section 9).
+
+`local-cases.js` holds what the vectors do not: sending under another node or
+agent, for which section 9 gives no code, and three drops of step 8 that no vector
+reaches. Those three go through the sender path, as they need no key there.
 
 It covers the receiver checks of sections 4 to 9 and the card checks of section
 11.2. It is not a usable node: it has no keys, no delivery and no durable storage.
