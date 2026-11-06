@@ -19,6 +19,7 @@ the final say.
 - Canonicalization (RFC 8785) test vectors: [test-vectors/jcs-v0.2.json](test-vectors/jcs-v0.2.json)
 - Receiver test vectors for any language: [test-vectors/receiver-v0.4.json](test-vectors/receiver-v0.4.json) (format in SPEC section 14)
 - Agent card test vectors: [test-vectors/card-v2.json](test-vectors/card-v2.json) (format in SPEC section 14)
+- A second implementation in Node, run against the vectors in CI: [interop/node/](interop/node/)
 - Design notes: [0.4](docs/design-0.4.md) and [0.3](docs/design-0.3.md)
 
 A request declares the terms as a list of issues of four kinds (`choice`,
